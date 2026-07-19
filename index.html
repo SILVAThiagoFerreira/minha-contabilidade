@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1e2d38" />
+    <meta name="description" content="Painel pessoal para organizar caixa, contas, custos fixos e CDB." />
+    <title>Minha contabilidade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="config.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+    <main id="authScreen" class="auth-screen">
+      <section class="auth-visual" aria-label="Apresentação do sistema">
+        <div class="auth-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <p class="eyebrow eyebrow--light">CONTROLE PESSOAL</p>
+        <h1>Seu dinheiro<br /><em>com clareza.</em></h1>
+        <p class="auth-visual-copy">Um livro-caixa direto ao ponto para acompanhar o mês, decidir melhor e deixar o CDB trabalhando com você.</p>
+        <div class="auth-ledger" aria-hidden="true">
+          <div><span>ENTRADAS</span><strong>+ R$ 4.820</strong></div>
+          <div><span>SAÍDAS</span><strong>− R$ 2.146</strong></div>
+          <div><span>RESERVA</span><strong>R$ 18.400</strong></div>
+        </div>
+        <small class="auth-note">Dados pessoais ficam protegidos por sua senha neste dispositivo.</small>
+      </section>
+
+      <section class="auth-panel">
+        <div class="auth-panel-inner">
+          <div class="auth-heading">
+            <p class="eyebrow">MINHA CONTABILIDADE</p>
+            <h2 id="authTitle">Entrar no painel</h2>
+            <p id="authSubtitle">Acompanhe seu dinheiro sem planilhas espalhadas.</p>
+          </div>
+          <form id="authForm" class="stack-form" novalidate>
+            <label class="field">
+              <span>Usuário</span>
+              <input id="authUsername" name="username" autocomplete="username" placeholder="ex.: thiago" required />
+            </label>
+            <label class="field">
+              <span>Senha</span>
+              <input id="authPassword" name="password" type="password" autocomplete="current-password" placeholder="mínimo de 8 caracteres" required />
+            </label>
+            <label id="confirmPasswordField" class="field is-hidden">
+              <span>Confirme sua senha</span>
+              <input id="authPasswordConfirm" name="passwordConfirm" type="password" autocomplete="new-password" placeholder="repita a senha" />
+            </label>
+            <button class="button button--primary button--wide" type="submit" id="authSubmit">Entrar</button>
+          </form>
+          <div id="googleAuthArea" class="google-auth is-hidden">
+            <div class="or-divider"><span>ou, com Google</span></div>
+            <div id="googleButton"></div>
+            <p>Disponível quando o modo online estiver configurado.</p>
+          </div>
+          <p id="authNotice" class="form-notice" role="status"></p>
+          <button id="authModeToggle" class="text-button" type="button">Criar uma conta local</button>
+          <p class="auth-privacy"><span class="status-dot status-dot--green"></span> Seus dados não entram no código publicado.</p>
+        </div>
+      </section>
+    </main>
+
+    <div id="appShell" class="app-shell is-hidden">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand-block">
+          <div class="brand-symbol" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div><strong>minha</strong><span>CONTABILIDADE</span></div>
+        </div>
+        <div class="sidebar-rule"></div>
+        <p class="sidebar-label">PAINEL</p>
+        <nav class="main-nav" aria-label="Navegação principal">
+          <button class="nav-item is-active" data-view-target="dashboard"><span class="nav-icon">⌂</span><span>Visão geral</span></button>
+          <button class="nav-item" data-view-target="lancamentos"><span class="nav-icon">↔</span><span>Lançamentos</span></button>
+          <button class="nav-item" data-view-target="contas"><span class="nav-icon">▣</span><span>Contas</span></button>
+          <button class="nav-item" data-view-target="fixos"><span class="nav-icon">◷</span><span>Custos fixos</span></button>
+          <button class="nav-item" data-view-target="cdb"><span class="nav-icon">◒</span><span>CDB</span></button>
+          <button class="nav-item" data-view-target="analises"><span class="nav-icon">▥</span><span>Análises</span></button>
+        </nav>
+        <div class="sidebar-bottom">
+          <button class="nav-item" data-view-target="configuracoes"><span class="nav-icon">⚙</span><span>Configurações</span></button>
+          <div class="sidebar-user">
+            <span class="avatar" id="sidebarAvatar">M</span>
+            <div><strong id="sidebarUserName">Usuário</strong><small id="sidebarUserMode">local protegido</small></div>
+            <button id="logoutButton" class="icon-button" type="button" title="Sair" aria-label="Sair">↗</button>
+          </div>
+        </div>
+      </aside>
+
+      <section class="content-shell">
+        <header class="topbar">
+          <button id="menuButton" class="menu-button" type="button" aria-label="Abrir menu">☰</button>
+          <div class="topbar-title"><p class="eyebrow">PAINEL PESSOAL</p><h2 id="pageTitle">Visão geral</h2></div>
+          <div class="topbar-actions">
+            <label class="period-control"><span>PERÍODO</span><select id="periodSelect" aria-label="Selecionar período"></select></label>
+            <span class="sync-badge" id="syncBadge"><span class="status-dot status-dot--green"></span> protegido</span>
+          </div>
+        </header>
+
+        <main class="main-content">
+          <section class="view is-active" data-view="dashboard">
+            <div class="view-intro">
+              <div><p class="eyebrow">RESUMO DO PERÍODO</p><h1 id="dashboardGreeting">Bom dia.</h1><p class="view-lede" id="dashboardLead">Veja o que aconteceu com o seu dinheiro e o que merece atenção.</p></div>
+              <div class="intro-actions"><button class="button button--secondary" data-action="load-sample" type="button">Ver exemplos</button><button class="button button--primary" data-action="open-transaction"><span>+</span> Lançar movimento</button></div>
+            </div>
+            <div id="demoBanner" class="demo-banner is-hidden"><span>i</span><div><strong>Você está vendo exemplos.</strong><p>São dados ilustrativos, não representam sua contabilidade. Remova-os quando quiser em Configurações.</p></div><button type="button" data-action="clear-sample" aria-label="Remover exemplos">×</button></div>
+            <div id="dashboardMetrics" class="metric-grid"></div>
+            <div class="dashboard-grid">
+              <article class="panel panel--wide">
+                <div class="panel-heading"><div><p class="eyebrow">MOVIMENTO</p><h3>Entradas e saídas</h3></div><span class="panel-period" id="cashflowPeriod"></span></div>
+                <div id="cashflowChart" class="cashflow-chart" aria-label="Gráfico de entradas e saídas"></div>
+                <div class="chart-legend"><span><i class="legend-dot legend-dot--income"></i> Entradas</span><span><i class="legend-dot legend-dot--expense"></i> Saídas</span></div>
+              </article>
+              <article class="panel">
+                <div class="panel-heading"><div><p class="eyebrow">DESTINO DO DINHEIRO</p><h3>Por categoria</h3></div></div>
+                <div id="categoryChart" class="category-chart"></div>
+                <div id="categoryLegend" class="category-legend"></div>
+              </article>
+            </div>
+            <div class="dashboard-grid dashboard-grid--lower">
+              <article class="panel">
+                <div class="panel-heading"><div><p class="eyebrow">PRÓXIMOS COMPROMISSOS</p><h3>Custos fixos</h3></div><button class="link-button" data-view-link="fixos">Ver todos →</button></div>
+                <div id="upcomingFixedCosts" class="list-stack"></div>
+              </article>
+              <article class="panel">
+                <div class="panel-heading"><div><p class="eyebrow">ONDE ESTÁ O DINHEIRO</p><h3>Contas</h3></div><button class="link-button" data-view-link="contas">Gerenciar →</button></div>
+                <div id="accountSnapshot" class="account-snapshot"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" data-view="lancamentos">
+            <div class="view-intro"><div><p class="eyebrow">CAIXA</p><h1>Lançamentos</h1><p class="view-lede">Registre entradas e saídas para entender o seu mês de verdade.</p></div><button class="button button--primary" data-action="open-transaction"><span>+</span> Novo lançamento</button></div>
+            <div class="section-grid">
+              <article class="panel form-panel" id="transactionFormPanel">
+                <div class="panel-heading"><div><p class="eyebrow">NOVO REGISTRO</p><h3>Adicionar movimento</h3></div></div>
+                <form id="transactionForm" class="stack-form" novalidate>
+                  <div class="segmented-control"><label><input type="radio" name="transactionType" value="saida" checked /><span>Saída</span></label><label><input type="radio" name="transactionType" value="entrada" /><span>Entrada</span></label></div>
+                  <div class="field-row"><label class="field"><span>Data</span><input type="date" name="date" required /></label><label class="field"><span>Valor</span><input type="number" name="amount" min="0.01" step="0.01" placeholder="0,00" required /></label></div>
+                  <label class="field"><span>Descrição</span><input name="description" placeholder="ex.: Supermercado" required /></label>
+                  <div class="field-row"><label class="field"><span>Categoria</span><select name="category" id="transactionCategory"></select></label><label class="field"><span>Conta</span><select name="accountId" id="transactionAccount"></select></label></div>
+                  <label class="field"><span>Observação <small>(opcional)</small></span><input name="notes" placeholder="alguma referência" /></label>
+                  <label class="check-field"><input type="checkbox" name="recurring" /><span>Repetir nos próximos meses</span></label>
+                  <button class="button button--primary button--wide" type="submit">Salvar lançamento</button>
+                </form>
+              </article>
+              <article class="panel panel--table">
+                <div class="panel-heading panel-heading--filters"><div><p class="eyebrow">HISTÓRICO</p><h3>Seus movimentos</h3></div><label class="mini-filter"><span>TIPO</span><select id="transactionFilter"><option value="todos">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option></select></label></div>
+                <div id="transactionTable" class="data-table-wrap"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" data-view="contas">
+            <div class="view-intro"><div><p class="eyebrow">PATRIMÔNIO LÍQUIDO</p><h1>Contas</h1><p class="view-lede">Separe o dinheiro por banco e saiba qual é o saldo disponível.</p></div></div>
+            <div id="accountMetrics" class="metric-grid metric-grid--three"></div>
+            <div class="section-grid section-grid--accounts"><article class="panel form-panel"><div class="panel-heading"><div><p class="eyebrow">NOVA CONTA</p><h3>Adicionar banco</h3></div></div><form id="accountForm" class="stack-form" novalidate><label class="field"><span>Nome do banco</span><input name="name" placeholder="ex.: Nubank" required /></label><div class="field-row"><label class="field"><span>Tipo</span><select name="type"><option value="corrente">Conta corrente</option><option value="poupanca">Poupança</option></select></label><label class="field"><span>Saldo inicial</span><input name="balance" type="number" step="0.01" placeholder="0,00" /></label></div><label class="field"><span>Identificação curta</span><input name="nickname" placeholder="ex.: conta do dia a dia" /></label><button class="button button--primary button--wide" type="submit">Salvar conta</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">SUAS CONTAS</p><h3>Saldo por banco</h3></div></div><div id="accountList" class="account-list"></div></article></div>
+          </section>
+
+          <section class="view" data-view="fixos">
+            <div class="view-intro"><div><p class="eyebrow">PLANEJAMENTO</p><h1>Custos fixos</h1><p class="view-lede">Antecipe o que já tem destino e enxergue o custo mínimo do seu mês.</p></div></div>
+            <div id="fixedMetrics" class="metric-grid metric-grid--three"></div>
+            <div class="section-grid"><article class="panel form-panel"><div class="panel-heading"><div><p class="eyebrow">NOVO COMPROMISSO</p><h3>Cadastrar custo fixo</h3></div></div><form id="fixedCostForm" class="stack-form" novalidate><label class="field"><span>Nome</span><input name="name" placeholder="ex.: Internet" required /></label><div class="field-row"><label class="field"><span>Valor mensal</span><input name="amount" type="number" min="0.01" step="0.01" placeholder="0,00" required /></label><label class="field"><span>Vencimento</span><input name="dueDay" type="number" min="1" max="31" placeholder="10" required /></label></div><div class="field-row"><label class="field"><span>Categoria</span><select name="category"><option>Moradia</option><option>Casa</option><option>Transporte</option><option>Saúde</option><option>Educação</option><option>Assinaturas</option><option>Outros</option></select></label><label class="field"><span>Conta de débito</span><select name="accountId" id="fixedAccount"></select></label></div><label class="check-field"><input type="checkbox" name="active" checked /><span>Custo ativo</span></label><button class="button button--primary button--wide" type="submit">Salvar custo fixo</button></form></article><article class="panel panel--table"><div class="panel-heading"><div><p class="eyebrow">COMPROMISSOS MENSAIS</p><h3>O que não pode ser esquecido</h3></div></div><div id="fixedCostTable" class="data-table-wrap"></div></article></div>
+          </section>
+
+          <section class="view" data-view="cdb">
+            <div class="view-intro"><div><p class="eyebrow">RESERVA E RENDIMENTO</p><h1>CDB</h1><p class="view-lede">Acompanhe o único investimento da sua carteira, sem misturar com o dinheiro do dia a dia.</p></div></div>
+            <div id="cdbMetrics" class="metric-grid metric-grid--three"></div>
+            <div class="section-grid"><article class="panel form-panel"><div class="panel-heading"><div><p class="eyebrow">NOVO INVESTIMENTO</p><h3>Adicionar CDB</h3></div></div><form id="cdbForm" class="stack-form" novalidate><label class="field"><span>Nome do CDB</span><input name="name" placeholder="ex.: CDB liquidez diária" required /></label><div class="field-row"><label class="field"><span>Banco / corretora</span><input name="bank" placeholder="ex.: Inter" required /></label><label class="field"><span>Valor aplicado</span><input name="principal" type="number" min="0.01" step="0.01" placeholder="0,00" required /></label></div><div class="field-row"><label class="field"><span>Rentabilidade anual</span><input name="rate" type="number" min="0" step="0.01" placeholder="ex.: 100" required /></label><label class="field"><span>Referência</span><select name="rateType"><option value="CDI">% do CDI</option><option value="pre">Prefixado (% a.a.)</option></select></label></div><div class="field-row"><label class="field"><span>Aplicação</span><input name="startedAt" type="date" required /></label><label class="field"><span>Vencimento</span><input name="maturityAt" type="date" /></label></div><label class="field"><span>Liquidez</span><select name="liquidity"><option>Liquidez diária</option><option>No vencimento</option><option>Outro</option></select></label><button class="button button--primary button--wide" type="submit">Salvar CDB</button></form></article><article class="panel panel--table"><div class="panel-heading"><div><p class="eyebrow">POSIÇÕES</p><h3>Seus CDBs</h3></div></div><div id="cdbTable" class="data-table-wrap"></div></article></div>
+            <article class="panel cdb-note-panel"><span class="note-mark">i</span><div><h3>Como ler essa tela</h3><p>A projeção de rendimento é uma estimativa simples sobre a taxa cadastrada. Ela não substitui o extrato da instituição e não considera impostos, IOF ou variações do CDI.</p></div></article>
+          </section>
+
+          <section class="view" data-view="analises">
+            <div class="view-intro"><div><p class="eyebrow">LEITURA DO COMPORTAMENTO</p><h1>Análises</h1><p class="view-lede">Transforme o histórico em decisões pequenas e consistentes.</p></div></div>
+            <div id="analysisHighlights" class="analysis-highlights"></div>
+            <div class="analysis-grid"><article class="panel panel--wide"><div class="panel-heading"><div><p class="eyebrow">SÉRIE HISTÓRICA</p><h3>Resultado mensal</h3></div></div><div id="analysisBars" class="analysis-bars"></div></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PESO NO MÊS</p><h3>Custos por categoria</h3></div></div><div id="analysisCategories" class="analysis-categories"></div></article></div>
+            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">COMPARAÇÃO</p><h3>Últimos meses</h3></div></div><div id="analysisTable" class="data-table-wrap"></div></article>
+          </section>
+
+          <section class="view" data-view="configuracoes">
+            <div class="view-intro"><div><p class="eyebrow">CONTROLE E PRIVACIDADE</p><h1>Configurações</h1><p class="view-lede">Escolha como guardar seus dados e mantenha uma cópia quando quiser.</p></div></div>
+            <div class="settings-grid"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PERFIL</p><h3>Seu cadastro</h3></div></div><form id="profileForm" class="stack-form"><label class="field"><span>Como quer ser chamado?</span><input name="displayName" id="profileDisplayName" required /></label><label class="field"><span>Moeda</span><select name="currency"><option value="BRL">Real brasileiro (R$)</option></select></label><button class="button button--secondary" type="submit">Salvar perfil</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">DADOS</p><h3>Importar e exportar</h3></div></div><p class="settings-copy">A exportação é um arquivo JSON legível. Guarde-o em local seguro: ele contém os seus lançamentos.</p><div class="settings-actions"><button class="button button--secondary" data-action="export-data" type="button">Baixar meus dados</button><label class="button button--ghost file-button">Importar JSON<input id="importDataInput" type="file" accept="application/json,.json" /></label></div><button class="danger-link" type="button" data-action="clear-all">Apagar todos os dados deste usuário</button></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ARMAZENAMENTO</p><h3 id="storageTitle">Local protegido</h3></div><span class="status-pill status-pill--green" id="storagePill">ATIVO</span></div><p id="storageDescription" class="settings-copy">Os dados são criptografados antes de serem guardados neste navegador. A senha não é armazenada.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span id="storageDetail">Nenhum dado é enviado para a internet neste modo.</span></div></article></div>
+            <article class="remote-info panel"><span class="note-mark">↗</span><div><h3>Modo online opcional</h3><p>Se você configurar o endpoint do Google Apps Script em <code>config.js</code>, o botão de entrada com Google passa a sincronizar a sua conta em uma linha privada da planilha. A configuração está documentada no repositório; o modo local continua funcionando sem ela.</p></div></article>
+          </section>
+        </main>
+      </section>
+    </div>
+  </body>
+</html>

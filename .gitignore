@@ -1,0 +1,10 @@
+VISUAL/
+*.xlsx
+*.xls
+*.csv
+.env
+.env.*
+!.env.example
+data/
+.DS_Store
+Thumbs.db
