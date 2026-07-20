@@ -261,6 +261,7 @@
     populateSelect($("#fixedAccount"), [{ value: "", label: "Sem conta definida" }, ...accounts], $("#fixedAccount")?.value || "");
     populateSelect($("#cdbAccount"), linkedAccounts.length ? linkedAccounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#cdbAccount")?.value || "");
     populateSelect($("#savingsAccount"), savingsAccounts.length ? savingsAccounts : [{ value: "", label: "Cadastre uma conta do tipo poupança" }], $("#savingsAccount")?.value || "");
+    populateSelect($("#investmentOperationAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#investmentOperationAccount")?.value || "");
   }
 
   function transactionsForPeriod(period = currentPeriod()) {
@@ -282,7 +283,27 @@
   }
 
   function totalInvested() {
-    return vault.investments.reduce((sum, item) => sum + toAmount(item.principal), 0);
+    return vault.investments.reduce((sum, item) => sum + Math.max(0, toAmount(item.principal)), 0);
+  }
+
+  function investmentYield(item) {
+    return Math.max(0, toAmount(item?.accumulatedYield ?? item?.reportedYield ?? 0));
+  }
+
+  function investmentCurrentValue(item) {
+    return Math.max(0, toAmount(item?.principal) + investmentYield(item));
+  }
+
+  function investmentHasHistory(item) {
+    return Boolean(item?.operations?.length || vault.transactions.some((transaction) => transaction.investmentId === item?.id || transaction.investmentOperationId && transaction.investmentId === item?.id));
+  }
+
+  function totalInvestmentValue() {
+    return vault.investments.reduce((sum, item) => sum + investmentCurrentValue(item), 0);
+  }
+
+  function roundAmount(value) {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   }
 
   function totalFixedCosts() {
@@ -310,7 +331,7 @@
   }
 
   function investmentProjection(item) {
-    const principal = toAmount(item.principal);
+    const principal = investmentCurrentValue(item);
     const rate = toAmount(item.rate);
     const rateType = normalizedRateType(item);
     let annualRate = 0;
@@ -371,6 +392,7 @@
     const savingsRate = income ? Math.round((result / income) * 100) : 0;
     const debtTotal = totalDebt();
     const invested = totalInvested();
+    const investmentValue = totalInvestmentValue();
     const displayName = vault.profile.displayName || "você";
     $("#dashboardGreeting").textContent = `Olá, ${displayName.split(" ")[0]}.`;
     $("#dashboardLead").textContent = `Este é o retrato do seu dinheiro em ${monthLabel(period)}.`;
@@ -385,12 +407,12 @@
       metricCard("SALDO EM CONTAS", formatShortCurrency(totalBalance()), "dinheiro disponível", "metric-card--accent"),
       metricCard("TOTAL INVESTIDO", formatShortCurrency(invested), `${vault.investments.length} posição(ões)`, "metric-card--positive"),
       metricCard("DÍVIDAS", formatShortCurrency(debtTotal), debtTotal ? `${vault.debts.filter((item) => item.active !== false).length} dívida(s) ativa(s)` : "nenhuma dívida cadastrada", "metric-card--warning"),
-      metricCard("PATRIMÔNIO LÍQUIDO", formatShortCurrency(totalBalance() + invested - debtTotal), "contas + investimentos − dívidas", "")
+      metricCard("PATRIMÔNIO LÍQUIDO", formatShortCurrency(totalBalance() + investmentValue - debtTotal), "contas + investimentos − dívidas", "")
     ].join("");
     renderCashflow();
     renderCategories(periodTransactions);
     renderUpcomingFixedCosts();
-    renderAccountSnapshot(invested);
+    renderAccountSnapshot(investmentValue);
   }
 
   function renderCashflow() {
@@ -428,7 +450,7 @@
     const filter = $("#transactionFilter").value;
     const items = transactionsForPeriod(period).filter((item) => filter === "todos" || item.type === filter).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
-    $("#transactionTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}</td><td>${escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${monthLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
+     $("#transactionTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th></th></tr></thead><tbody>${items.map((item) => { const actions = item.investmentOperationId ? `<span class="status-pill status-pill--muted" title="Movimentação controlada pela carteira de investimentos">INVESTIMENTO</span>` : `<span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span>`; return `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}</td><td>${escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td>${actions}</td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${monthLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
   }
 
   function renderAccounts() {
@@ -506,7 +528,7 @@
     const nextMaturity = positions.filter((item) => item.maturityAt).sort((a, b) => String(a.maturityAt).localeCompare(String(b.maturityAt)))[0]?.maturityAt;
     const projectionMeta = projections.length ? `${projections.length} posição(ões) com estimativa bruta` : positions.length ? "informe o CDI base ou uma taxa" : "cadastre um investimento";
     $("#cdbMetrics").innerHTML = [metricCard("TOTAL INVESTIDO", formatShortCurrency(principal), `${positions.length} posição(ões)`, "metric-card--accent"), metricCard("PROJEÇÃO MENSAL", projections.length ? formatShortCurrency(monthlyProjection) : "—", projectionMeta, "metric-card--positive"), metricCard("PRÓXIMO VENCIMENTO", nextMaturity ? formatDate(nextMaturity) : "—", nextMaturity ? "conforme cadastro" : "nenhum vencimento informado", "")].join("");
-    $("#cdbTable").innerHTML = positions.length ? `<table class="data-table"><thead><tr><th>INVESTIMENTO</th><th>TIPO</th><th>CONTA / BANCO</th><th>APLICADO</th><th>REFERÊNCIA</th><th>PROJEÇÃO / MÊS</th><th>VENCIMENTO</th><th></th></tr></thead><tbody>${positions.map((item) => { const account = accountById(item.accountId); const institution = account ? `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` : item.bank || "—"; const projection = investmentProjection(item); const rateType = normalizedRateType(item); const rateLabel = rateType === "cdi" ? `${item.rate || 0}% CDI` : rateType === "pre" ? `${item.rate || 0}% a.a.` : item.rate ? `${item.rate}% a.a.` : "—"; return `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td><span class="status-pill status-pill--muted">${escapeHtml(investmentTypeLabel(item.type || "cdb"))}</span></td><td>${escapeHtml(institution)}</td><td class="number">${formatCurrency(item.principal)}</td><td>${escapeHtml(rateLabel)}${rateType === "cdi" && item.benchmarkRate ? `<br><small class="muted-cell">CDI base: ${escapeHtml(item.benchmarkRate)}% a.a.</small>` : ""}</td><td class="number">${projection.monthly === null ? `<span title="${escapeHtml(projection.label)}">—</span>` : formatCurrency(projection.monthly)}</td><td>${formatDate(item.maturityAt)}</td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-investment" data-id="${item.id}" title="Editar investimento" aria-label="Editar investimento">✎</button><button class="table-action" type="button" data-action="delete-investment" data-id="${item.id}" title="Excluir investimento" aria-label="Excluir investimento">×</button></span></td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum investimento cadastrado.</strong><span>Comece pelo CDB ou adicione outro tipo de investimento.</span></div>`;
+    $("#cdbTable").innerHTML = positions.length ? `<table class="data-table investment-table"><thead><tr><th>INVESTIMENTO</th><th>TIPO</th><th>CONTA / BANCO</th><th>APLICADO</th><th>VALOR ATUAL</th><th>REFERÊNCIA</th><th>PROJEÇÃO / MÊS</th><th>VENCIMENTO</th><th>AÇÕES</th></tr></thead><tbody>${positions.map((item) => { const account = accountById(item.accountId); const institution = account ? `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` : item.bank || "—"; const projection = investmentProjection(item); const rateType = normalizedRateType(item); const rateLabel = rateType === "cdi" ? `${item.rate || 0}% CDI` : rateType === "pre" ? `${item.rate || 0}% a.a.` : item.rate ? `${item.rate}% a.a.` : "—"; const currentValue = investmentCurrentValue(item); const yieldValue = investmentYield(item); return `<tr><td><strong>${escapeHtml(item.name)}</strong>${item.operations?.length ? `<br><small class="muted-cell">${item.operations.length} movimentação(ões) registradas</small>` : ""}</td><td><span class="status-pill status-pill--muted">${escapeHtml(investmentTypeLabel(item.type || "cdb"))}</span></td><td>${escapeHtml(institution)}</td><td class="number">${formatCurrency(item.principal)}</td><td class="number">${formatCurrency(currentValue)}${yieldValue ? `<br><small class="positive-number">+${formatCurrency(yieldValue)} rendimento</small>` : ""}</td><td>${escapeHtml(rateLabel)}${rateType === "cdi" && item.benchmarkRate ? `<br><small class="muted-cell">CDI base: ${escapeHtml(item.benchmarkRate)}% a.a.</small>` : ""}</td><td class="number">${projection.monthly === null ? `<span title="${escapeHtml(projection.label)}">—</span>` : formatCurrency(projection.monthly)}</td><td>${formatDate(item.maturityAt)}</td><td><div class="investment-actions"><button class="investment-action investment-action--aporte" type="button" data-action="open-investment-operation" data-operation-type="aporte" data-id="${item.id}" title="Aplicar neste investimento">Aporte</button><button class="investment-action investment-action--resgate" type="button" data-action="open-investment-operation" data-operation-type="resgate" data-id="${item.id}" title="Resgatar deste investimento">Resgatar</button><button class="investment-action investment-action--rendimento" type="button" data-action="open-investment-operation" data-operation-type="rendimento" data-id="${item.id}" title="Informar rendimento deste investimento">Rendimento</button></div><span class="table-actions investment-edit-actions"><button class="table-action" type="button" data-action="edit-investment" data-id="${item.id}" title="Editar investimento" aria-label="Editar investimento">✎</button><button class="table-action" type="button" data-action="delete-investment" data-id="${item.id}" title="Excluir investimento" aria-label="Excluir investimento">×</button></span></td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum investimento cadastrado.</strong><span>Comece pelo CDB ou adicione outro tipo de investimento.</span></div>`;
   }
 
   function getMonthlySummary(count = 6) {
@@ -528,8 +550,9 @@
     const selectedMonth = months[months.length - 1];
     const savings = selectedMonth.income ? Math.round(selectedMonth.rate) : 0;
     const invested = totalInvested();
+    const investmentValue = totalInvestmentValue();
     const debt = totalDebt();
-    const netWorth = totalBalance() + invested - debt;
+    const netWorth = totalBalance() + investmentValue - debt;
     $("#analysisHighlights").innerHTML = [
       `<article class="insight-card"><p class="eyebrow">TAXA DE SOBRA</p><h3>${savings}%</h3><p>do que entrou em ${monthLabel(selectedMonth.period)} ficou no caixa.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">MAIOR CATEGORIA</p><h3>${topCategory ? escapeHtml(topCategory[0]) : "—"}</h3><p>${topCategory ? `${formatCurrency(topCategory[1])} em saídas no período.` : "Cadastre saídas para descobrir."}</p></article>`,
@@ -597,6 +620,10 @@
       $("input[name='startedAt']", form).value = todayIso();
       $("select[name='investmentType']", form).value = "cdb";
       $("select[name='rateType']", form).value = "cdi";
+      $("input[name='principal']", form).disabled = false;
+      $("select[name='accountId']", form).disabled = false;
+      $("input[name='principal']", form).removeAttribute("title");
+      $("select[name='accountId']", form).removeAttribute("title");
       setFormMode(form, "investment", false);
     }
   }
@@ -629,6 +656,8 @@
   }
 
   async function deleteById(collection, id, message) {
+    const target = vault[collection].find((item) => item.id === id);
+    if (collection === "transactions" && target?.investmentOperationId) { showToast("Este lançamento pertence a uma operação de investimento e não pode ser removido isoladamente.", "error"); return; }
     if (!window.confirm(message)) return;
     vault[collection] = vault[collection].filter((item) => item.id !== id);
     await saveCurrentVault();
@@ -663,6 +692,8 @@
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
     if (!data.accountId) { showToast("Cadastre uma conta antes de lançar um movimento.", "error"); setView("contas"); return; }
+    const linkedTransaction = vault.transactions.find((item) => item.id === form.dataset.editId && item.investmentOperationId);
+    if (linkedTransaction) { showToast("Este lançamento pertence a uma operação de investimento. Use Aporte ou Resgatar na carteira.", "error"); return; }
     const transaction = { id: form.dataset.editId || uid("tx"), date: data.date, description: data.description.trim(), category: data.category, accountId: data.accountId, amount: toAmount(data.amount), type: data.transactionType, notes: data.notes?.trim() || "", recurring: data.recurring === "on" };
     const existingIndex = vault.transactions.findIndex((item) => item.id === form.dataset.editId);
     if (existingIndex >= 0) vault.transactions[existingIndex] = { ...vault.transactions[existingIndex], ...transaction };
@@ -676,6 +707,7 @@
   function editTransaction(id) {
     const item = vault.transactions.find((transaction) => transaction.id === id);
     if (!item) return;
+    if (item.investmentOperationId) { showToast("Este lançamento pertence a uma operação de investimento. Use Aporte ou Resgatar na carteira.", "error"); return; }
     setView("lancamentos");
     const form = $("#transactionForm");
     form.dataset.editId = item.id;
@@ -735,9 +767,11 @@
     event.preventDefault();
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
-    const account = accountById(data.accountId);
+    const existingInvestment = vault.investments.find((item) => item.id === form.dataset.editId);
+    const hasHistory = investmentHasHistory(existingInvestment);
+    const account = accountById(hasHistory ? existingInvestment.accountId : data.accountId);
     if (!account) { showToast("Cadastre e selecione a conta que guarda este CDB.", "error"); setView("contas"); return; }
-    const record = { id: form.dataset.editId || uid("investment"), type: data.investmentType || "cdb", name: data.name.trim(), accountId: account.id, bank: account.name, principal: toAmount(data.principal), rate: toAmount(data.rate), rateType: data.rateType || "none", benchmarkRate: toAmount(data.benchmarkRate), startedAt: data.startedAt, maturityAt: data.maturityAt || "", liquidity: data.liquidity || "" };
+    const record = { id: form.dataset.editId || uid("investment"), type: data.investmentType || "cdb", name: data.name.trim(), accountId: account.id, bank: account.name, principal: hasHistory ? existingInvestment.principal : toAmount(data.principal), rate: toAmount(data.rate), rateType: data.rateType || "none", benchmarkRate: toAmount(data.benchmarkRate), startedAt: data.startedAt, maturityAt: data.maturityAt || "", liquidity: data.liquidity || "" };
     const existingIndex = vault.investments.findIndex((item) => item.id === form.dataset.editId);
     if (existingIndex >= 0) vault.investments[existingIndex] = { ...vault.investments[existingIndex], ...record };
     else vault.investments.push(record);
@@ -745,6 +779,94 @@
     clearForm(form);
     renderAll();
     showToast(existingIndex >= 0 ? "Investimento atualizado." : "Investimento cadastrado.");
+  }
+
+  function operationLabel(type) {
+    return ({ aporte: "Aporte", resgate: "Resgate", rendimento: "Rendimento" }[type] || "Movimentação");
+  }
+
+  function closeInvestmentOperation() {
+    const dialog = $("#investmentOperationDialog");
+    const form = $("#investmentOperationForm");
+    if (dialog?.open) dialog.close();
+    if (form) form.reset();
+  }
+
+  function openInvestmentOperation(id, type) {
+    const item = vault.investments.find((investment) => investment.id === id);
+    const dialog = $("#investmentOperationDialog");
+    const form = $("#investmentOperationForm");
+    if (!item || !dialog || !form) return;
+    refreshFormSelects();
+    const account = accountById(item.accountId);
+    form.dataset.investmentId = item.id;
+    form.dataset.operationType = type;
+    $("#investmentOperationType").value = type;
+    $("#investmentOperationEyebrow").textContent = `${operationLabel(type).toUpperCase()} NO INVESTIMENTO`;
+    $("#investmentOperationTitle").textContent = `${operationLabel(type)} · ${item.name}`;
+    $("#investmentOperationSubtitle").textContent = type === "rendimento" ? "Informe o rendimento já conferido no extrato, sem misturá-lo ao capital aportado." : type === "aporte" ? "Some uma nova aplicação a esta mesma posição e mantenha as movimentações anteriores." : "Registre uma retirada parcial ou total sem apagar o histórico desta posição.";
+    $("#investmentOperationCurrentValue").textContent = formatCurrency(investmentCurrentValue(item));
+    $("#investmentOperationDate").value = todayIso();
+    $("#investmentOperationAccount").value = account?.id || "";
+    const accountField = $("#investmentOperationAccountField");
+    const accountLabel = $("#investmentOperationAccountLabel");
+    const accountHelp = $("#investmentOperationAccountHelp");
+    const accountSelect = $("#investmentOperationAccount");
+    const hasAccounts = vault.accounts.length > 0;
+    accountField.classList.toggle("is-hidden", type === "rendimento");
+    accountSelect.required = type !== "rendimento";
+    accountLabel.textContent = type === "aporte" ? "Conta de origem" : "Conta de destino";
+    accountHelp.textContent = type === "aporte" ? "Será criado um lançamento de saída na conta escolhida." : "Será criado um lançamento de entrada na conta escolhida.";
+    $("#investmentOperationHint").textContent = type === "rendimento" ? "O rendimento informado aumenta o valor atual da posição. Nenhum lançamento é criado na conta enquanto o valor não for resgatado." : type === "aporte" ? "O aporte aumenta o capital aplicado e reduz o saldo da conta de origem pelo mesmo valor." : `Disponível para resgate: ${formatCurrency(investmentCurrentValue(item))}. O saldo da posição e a conta de destino serão atualizados juntos.`;
+    if (type !== "rendimento" && !hasAccounts) { showToast("Cadastre uma conta antes de registrar este movimento.", "error"); setView("contas"); return; }
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "open");
+    $("#investmentOperationAmount").focus();
+  }
+
+  async function handleInvestmentOperationSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const type = form.dataset.operationType || $("#investmentOperationType").value;
+    const item = vault.investments.find((investment) => investment.id === form.dataset.investmentId);
+    const data = Object.fromEntries(new FormData(form).entries());
+    const amount = roundAmount(toAmount(data.amount));
+    if (!item || !type) { closeInvestmentOperation(); return; }
+    if (amount <= 0) { showToast("Informe um valor maior que zero.", "error"); return; }
+    if (type !== "rendimento" && !data.accountId) { showToast("Selecione a conta do movimento.", "error"); return; }
+    const before = JSON.parse(JSON.stringify(item));
+    const principalBefore = Math.max(0, toAmount(item.principal));
+    const yieldBefore = investmentYield(item);
+    const currentValueBefore = principalBefore + yieldBefore;
+    if (type === "resgate" && amount > currentValueBefore + 0.005) { showToast(`O resgate não pode ultrapassar ${formatCurrency(currentValueBefore)}.`, "error"); return; }
+    const operation = { id: uid("investment-operation"), type, amount, date: data.date || todayIso(), note: data.note?.trim() || "", accountId: data.accountId || "", createdAt: new Date().toISOString() };
+    if (type === "aporte") item.principal = roundAmount(principalBefore + amount);
+    if (type === "rendimento") item.accumulatedYield = roundAmount(yieldBefore + amount);
+    if (type === "resgate") {
+      const principalReduction = Math.min(principalBefore, amount);
+      item.principal = roundAmount(principalBefore - principalReduction);
+      item.accumulatedYield = roundAmount(Math.max(0, yieldBefore - (amount - principalReduction)));
+    }
+    operation.principalAfter = item.principal;
+    operation.yieldAfter = investmentYield(item);
+    operation.balanceAfter = investmentCurrentValue(item);
+    item.operations = [...(Array.isArray(item.operations) ? item.operations : []), operation];
+    item.updatedAt = new Date().toISOString();
+    if (type === "aporte" || type === "resgate") {
+      vault.transactions.push({ id: uid("tx"), date: operation.date, description: `${operationLabel(type)} · ${item.name}`, category: "Investimentos", accountId: operation.accountId, amount, type: type === "aporte" ? "saida" : "entrada", notes: operation.note, recurring: false, investmentOperationId: operation.id, investmentId: item.id });
+    }
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      Object.keys(item).forEach((key) => delete item[key]);
+      Object.assign(item, before);
+      vault.transactions = vault.transactions.filter((transaction) => transaction.investmentOperationId !== operation.id);
+      showToast(error.message || "A movimentação não foi sincronizada.", "error");
+      return;
+    }
+    closeInvestmentOperation();
+    renderAll();
+    showToast(type === "aporte" ? "Aporte registrado no investimento." : type === "resgate" ? "Resgate registrado e lançado na conta." : "Rendimento informado no investimento.");
   }
 
   function editFixed(id) {
@@ -798,6 +920,14 @@
     $("input[name='startedAt']", form).value = item.startedAt || todayIso();
     $("input[name='maturityAt']", form).value = item.maturityAt || "";
     $("select[name='liquidity']", form).value = item.liquidity || "Outro";
+    const hasHistory = investmentHasHistory(item);
+    $("input[name='principal']", form).disabled = hasHistory;
+    $("select[name='accountId']", form).disabled = hasHistory;
+    if (hasHistory) {
+      $("input[name='principal']", form).title = "Protegido pelo histórico. Use Aporte ou Resgatar.";
+      $("select[name='accountId']", form).title = "Protegido pelo histórico da posição.";
+      showToast("Capital e conta ficam protegidos porque esta posição já possui movimentações. Use Aporte ou Resgatar para alterar o saldo.");
+    }
     setFormMode(form, "investment", true);
     form.closest(".form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
     showToast("Edite os campos e salve novamente.");
@@ -855,6 +985,13 @@
     await deleteById("accounts", accountId, `Excluir a conta ${account.name}?`);
   }
 
+  async function deleteInvestment(id) {
+    const item = vault.investments.find((investment) => investment.id === id);
+    if (!item) return;
+    if (investmentHasHistory(item)) { showToast("Este investimento possui histórico de movimentações e não pode ser apagado. Use as ações da carteira para continuar registrando-o.", "error"); return; }
+    await deleteById("investments", id, "Excluir este investimento?");
+  }
+
   function bindEvents() {
     $("#authForm").addEventListener("submit", handleAuthSubmit);
     $("#authModeToggle").addEventListener("click", () => setAuthMode(authMode === "login" ? "signup" : "login"));
@@ -867,6 +1004,9 @@
     $("#debtForm").addEventListener("submit", handleDebtSubmit);
     $("#fixedCostForm").addEventListener("submit", handleFixedSubmit);
     $("#cdbForm").addEventListener("submit", handleCdbSubmit);
+    $("#investmentOperationForm").addEventListener("submit", handleInvestmentOperationSubmit);
+    $("#investmentOperationDialog").addEventListener("cancel", (event) => { event.preventDefault(); closeInvestmentOperation(); });
+    $("#investmentOperationDialog").addEventListener("close", () => $("#investmentOperationForm").reset());
     $("#savingsForm").addEventListener("submit", handleSavingsSubmit);
     $("#savingsAccount").addEventListener("change", fillSavingsForm);
     $("#profileForm").addEventListener("submit", handleProfileSubmit);
@@ -887,7 +1027,9 @@
       if (action === "edit-fixed") editFixed(target.dataset.id);
       if (action === "cancel-form") { clearForm(target.closest("form")); renderAll(); }
       if (action === "edit-investment") editInvestment(target.dataset.id);
-      if (action === "delete-investment") await deleteById("investments", target.dataset.id, "Excluir este investimento?");
+      if (action === "delete-investment") await deleteInvestment(target.dataset.id);
+      if (action === "open-investment-operation") openInvestmentOperation(target.dataset.id, target.dataset.operationType);
+      if (action === "close-investment-operation") closeInvestmentOperation();
       if (action === "toggle-fixed") { const item = vault.fixedCosts.find((fixed) => fixed.id === target.dataset.id); if (item) { item.active = item.active === false; await saveCurrentVault(); renderAll(); showToast(item.active ? "Custo fixo ativado." : "Custo fixo pausado."); } }
     });
   }

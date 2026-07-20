@@ -43,7 +43,7 @@ O backend cria ou valida as seguintes abas:
 - VaultCurrent: uma revisão corrente por usuário;
 - VaultJournal: histórico append-only de cada sincronização.
 
-O JSON de cada usuário mantém as coleções `accounts`, `transactions`, `fixedCosts`, `debts`, `investments`, `cdbs` (espelho de compatibilidade) e `savings`. Os investimentos antigos em `cdbs` são lidos sem perda e passam a aparecer na aba Investimentos.
+O JSON de cada usuário mantém as coleções `accounts`, `transactions`, `fixedCosts`, `debts`, `investments`, `cdbs` (espelho de compatibilidade) e `savings`. Os investimentos antigos em `cdbs` são lidos sem perda e passam a aparecer na aba Investimentos. Cada investimento pode manter `operations[]`, com operações `aporte`, `resgate` e `rendimento`; os dois primeiros tipos também marcam os lançamentos relacionados em `transactions` por meio de `investmentOperationId` e `investmentId`. O histórico é acrescentado ao snapshot e não substitui os dados anteriores da posição.
 
 O frontend calcula o identificador do usuário para localizar o cadastro, mas o backend confirma o mesmo hash, procura o usuário na aba Users e verifica a senha com salt. O backend não aceita get ou sync sem uma senha válida. A senha é enviada apenas pela conexão HTTPS do Web App e nunca é gravada em texto puro; a planilha guarda apenas o salt e o verificador.
 

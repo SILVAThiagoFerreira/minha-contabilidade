@@ -192,9 +192,55 @@ function jsonPayload_(payload) {
     if (payload[name] !== undefined && !Array.isArray(payload[name])) throw new Error("Estrutura inválida em " + name + ".");
     if (Array.isArray(payload[name]) && payload[name].length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de registros excedida em " + name + ".");
   });
+  validateInvestmentOperations_(payload.investments || [], payload.transactions || []);
   const text = JSON.stringify(payload);
   if (text.length > MAX_PAYLOAD_CHARS) throw new Error("O cofre ultrapassou o limite seguro da planilha.");
   return text;
+}
+
+function validateInvestmentOperations_(investments, transactions) {
+  const operationIds = {};
+  const investmentByOperation = {};
+  investments.forEach((investment) => {
+    if (!investment || typeof investment !== "object") throw new Error("Investimento inválido.");
+    const operations = investment.operations === undefined ? [] : investment.operations;
+    if (!Array.isArray(operations)) throw new Error("Histórico de movimentações inválido no investimento.");
+    if (operations.length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de movimentações excedida no investimento.");
+    operations.forEach((operation) => {
+      if (!operation || typeof operation !== "object") throw new Error("Movimentação de investimento inválida.");
+      const operationId = String(operation.id || "");
+      const operationType = String(operation.type || "");
+      const amount = Number(operation.amount);
+      if (!operationId || operationIds[operationId]) throw new Error("Cada movimentação de investimento precisa ter um ID único.");
+      if (["aporte", "resgate", "rendimento"].indexOf(operationType) === -1) throw new Error("Tipo de movimentação de investimento inválido.");
+      if (!isFinite(amount) || amount <= 0) throw new Error("O valor da movimentação precisa ser maior que zero.");
+      if (!String(operation.date || "")) throw new Error("A movimentação de investimento precisa ter uma data.");
+      if ((operationType === "aporte" || operationType === "resgate") && !String(operation.accountId || "")) throw new Error("Aporte e resgate precisam indicar a conta do movimento.");
+      if (operation.balanceAfter !== undefined && (!isFinite(Number(operation.balanceAfter)) || Number(operation.balanceAfter) < 0)) throw new Error("Saldo posterior da movimentação inválido.");
+      if (operation.principalAfter !== undefined && (!isFinite(Number(operation.principalAfter)) || Number(operation.principalAfter) < 0)) throw new Error("Capital posterior da movimentação inválido.");
+      if (operation.yieldAfter !== undefined && (!isFinite(Number(operation.yieldAfter)) || Number(operation.yieldAfter) < 0)) throw new Error("Rendimento posterior da movimentação inválido.");
+      operationIds[operationId] = true;
+      investmentByOperation[operationId] = { investmentId: String(investment.id || ""), operation };
+    });
+  });
+  transactions.forEach((transaction) => {
+    const operationId = String(transaction && transaction.investmentOperationId || "");
+    if (!operationId) return;
+    const linked = investmentByOperation[operationId];
+    if (!linked) throw new Error("Lançamento de investimento sem movimentação correspondente.");
+    const operation = linked.operation;
+    if (operation.type === "rendimento") throw new Error("Rendimento informado não pode criar lançamento de conta.");
+    if (String(transaction.investmentId || "") !== linked.investmentId) throw new Error("Lançamento vinculado a investimento incorreto.");
+    if (String(transaction.accountId || "") !== String(operation.accountId || "")) throw new Error("Conta do lançamento não confere com a operação.");
+    const expectedTransactionType = operation.type === "aporte" ? "saida" : "entrada";
+    if (String(transaction.type || "") !== expectedTransactionType || Math.abs(Number(transaction.amount) - Number(operation.amount)) > 0.005) throw new Error("Valor ou tipo do lançamento não confere com a operação.");
+    linked.transactionCount = (linked.transactionCount || 0) + 1;
+  });
+  Object.keys(investmentByOperation).forEach((operationId) => {
+    const linked = investmentByOperation[operationId];
+    if (linked.operation.type !== "rendimento" && linked.transactionCount !== 1) throw new Error("Aporte e resgate precisam ter exatamente um lançamento de conta.");
+    if (linked.operation.type === "rendimento" && linked.transactionCount) throw new Error("Rendimento informado não pode criar lançamento de conta.");
+  });
 }
 
 function parseRow_(row, kind) {
