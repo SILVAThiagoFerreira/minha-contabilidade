@@ -171,13 +171,18 @@
     return { record, material, loadedVault: normalizeVault(await decryptVault(record.vault, material.key)) };
   }
 
-  async function remoteRequest(action, idToken, payload, baseRevision) {
+  async function remoteAccountId(username) {
+    const digest = await crypto.subtle.digest("SHA-256", encoder.encode(username.trim().toLowerCase()));
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function remoteRequest(action, identity, payload, baseRevision) {
     if (!CONFIG.apiUrl) throw new Error("O endpoint online ainda não foi configurado.");
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 15000);
     let response;
     try {
-      response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, idToken, payload, baseRevision }), signal: controller.signal });
+      response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, accountId: identity.accountId, username: identity.username, payload, baseRevision }), signal: controller.signal });
     } catch (error) {
       if (error.name === "AbortError") throw new Error("O armazenamento online demorou demais para responder.");
       throw new Error("Não foi possível alcançar o armazenamento online.");
@@ -187,22 +192,43 @@
     return result;
   }
 
+  async function cacheLocalVault() {
+    const accounts = getLocalAccounts();
+    const index = accounts.findIndex((item) => item.id === session?.recordId);
+    if (index === -1 || !cryptoKey) return;
+    accounts[index].vault = await encryptVault(vault, cryptoKey);
+    accounts[index].displayName = vault.profile.displayName;
+    saveLocalAccounts(accounts);
+  }
+
+  async function openAccount(record, material, fallbackVault) {
+    cryptoKey = material.key;
+    const identity = { accountId: await remoteAccountId(record.username), username: record.username };
+    if (!CONFIG.apiUrl) {
+      session = { mode: "local", recordId: record.id, ...identity };
+      vault = fallbackVault;
+      return { online: false, recovered: false };
+    }
+    const result = await remoteRequest("get", identity);
+    session = { mode: "online", recordId: record.id, ...identity, revision: Number(result.revision || 0) };
+    vault = normalizeVault(result.payload || fallbackVault);
+    if (result.payload) await cacheLocalVault();
+    else await saveCurrentVault();
+    return { online: true, recovered: Boolean(result.recovered) };
+  }
+
   async function saveCurrentVault() {
     if (!vault || !session) return;
     vault.updatedAt = new Date().toISOString();
     saveQueue = saveQueue.catch(() => {}).then(async () => {
-      if (session.mode === "remote") {
-        const result = await remoteRequest("sync", session.idToken, vault, session.revision || 0);
+      if (session.mode === "online") {
+        const result = await remoteRequest("sync", session, vault, session.revision || 0);
         session.revision = Number(result.revision || session.revision || 0);
         if (result.backupWarning) showToast(result.backupWarning, "error");
+        await cacheLocalVault();
         return;
       }
-      const accounts = getLocalAccounts();
-      const index = accounts.findIndex((item) => item.id === session.recordId);
-      if (index === -1 || !cryptoKey) throw new Error("Sessão local expirada. Entre novamente.");
-      accounts[index].vault = await encryptVault(vault, cryptoKey);
-      accounts[index].displayName = vault.profile.displayName;
-      saveLocalAccounts(accounts);
+      await cacheLocalVault();
     }).catch((error) => { showToast(error.message, "error"); throw error; });
     return saveQueue;
   }
@@ -238,11 +264,11 @@
   function enterApp() {
     $("#authScreen").classList.add("is-hidden");
     $("#appShell").classList.remove("is-hidden");
-    const displayName = vault.profile.displayName || session.username || session.email?.split("@")[0] || "Usuário";
+    const displayName = vault.profile.displayName || session.username || "Usuário";
     $("#sidebarUserName").textContent = displayName;
     $("#sidebarAvatar").textContent = displayName.trim().charAt(0).toUpperCase() || "M";
-    $("#sidebarUserMode").textContent = session.mode === "remote" ? "online sincronizado" : "local protegido";
-    $("#syncBadge").innerHTML = `<span class="status-dot status-dot--green"></span>${session.mode === "remote" ? "sincronizado" : "protegido"}`;
+    $("#sidebarUserMode").textContent = session.mode === "online" ? "planilha sincronizada" : "local protegido";
+    $("#syncBadge").innerHTML = `<span class="status-dot status-dot--green"></span>${session.mode === "online" ? "sincronizado" : "protegido"}`;
     setView("dashboard");
     renderAll();
   }
@@ -442,10 +468,10 @@
 
   function renderSettings() {
     $("#profileDisplayName").value = vault.profile.displayName || "";
-    $("#storageTitle").textContent = session.mode === "remote" ? "Online sincronizado" : "Local protegido";
-    $("#storagePill").textContent = session.mode === "remote" ? "ONLINE" : "ATIVO";
-    $("#storageDescription").textContent = session.mode === "remote" ? "As alterações são enviadas ao endpoint configurado e filtradas pelo usuário autenticado." : "Os dados são criptografados antes de serem guardados neste navegador. A senha não é armazenada.";
-    $("#storageDetail").textContent = session.mode === "remote" ? "Sincronização por conta Google configurada." : "Nenhum dado é enviado para a internet neste modo.";
+    $("#storageTitle").textContent = session.mode === "online" ? "Planilha sincronizada" : "Local protegido";
+    $("#storagePill").textContent = session.mode === "online" ? "ONLINE" : "ATIVO";
+    $("#storageDescription").textContent = session.mode === "online" ? "As alterações são enviadas à planilha e aos snapshots da pasta do Drive usando o seu usuário local." : "Os dados são criptografados antes de serem guardados neste navegador. A senha não é armazenada.";
+    $("#storageDetail").textContent = session.mode === "online" ? "Sincronização com Google Sheets/Drive configurada." : "Nenhum dado é enviado para a internet neste modo.";
   }
 
   function renderAll() {
@@ -525,18 +551,15 @@
       if (authMode === "signup") {
         if (data.password !== data.passwordConfirm) throw new Error("As senhas não conferem.");
         const result = await createLocalAccount(data.username, data.password, data.username);
-        session = { mode: "local", recordId: result.record.id, username: result.record.username };
-        cryptoKey = result.material.key;
-        vault = result.initialVault;
+        const opened = await openAccount(result.record, result.material, result.initialVault);
         setAuthNotice("Conta criada.", true);
         enterApp();
-        showToast("Conta local criada com proteção por senha.");
+        showToast(opened.online ? "Conta criada e sincronizada na planilha." : "Conta local criada com proteção por senha.");
       } else {
         const result = await loginLocal(data.username, data.password);
-        session = { mode: "local", recordId: result.record.id, username: result.record.username };
-        cryptoKey = result.material.key;
-        vault = result.loadedVault;
+        const opened = await openAccount(result.record, result.material, result.loadedVault);
         enterApp();
+        if (opened.recovered) showToast("Dados recuperados do histórico da planilha.");
       }
     } catch (error) {
       setAuthNotice(error.message || "Não foi possível concluir.");
@@ -652,39 +675,6 @@
     showToast("Dados deste usuário apagados.");
   }
 
-  async function handleGoogleCredential(response) {
-    if (!response?.credential) return;
-    setAuthNotice("Entrando com Google…");
-    try {
-      const result = await remoteRequest("get", response.credential);
-      session = { mode: "remote", idToken: response.credential, email: result.email, revision: Number(result.revision || 0) };
-      vault = normalizeVault(result.payload || blankVault(result.email.split("@")[0]));
-      enterApp();
-      showToast(result.recovered ? "Conta conectada; a última revisão válida foi recuperada." : "Conta online conectada.");
-    } catch (error) { setAuthNotice(error.message || "Não foi possível conectar ao modo online."); }
-  }
-
-  function loadGoogleAuth() {
-    const area = $("#googleAuthArea");
-    const hint = $("#googleAuthHint");
-    area.classList.remove("is-hidden");
-    if (!CONFIG.apiUrl || !CONFIG.googleClientId) {
-      hint.textContent = "Login Google preparado; falta publicar o endpoint Apps Script e informar o client ID em config.js.";
-      return;
-    }
-    hint.textContent = "Use sua conta Google. Os dados serão separados pelo identificador da conta e sincronizados no Drive privado.";
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.onload = () => {
-      if (!window.google?.accounts?.id) return;
-      window.google.accounts.id.initialize({ client_id: CONFIG.googleClientId, callback: handleGoogleCredential });
-      window.google.accounts.id.renderButton($("#googleButton"), { theme: "outline", size: "large", width: 360, text: "signin_with" });
-    };
-    script.onerror = () => { hint.textContent = "Não foi possível carregar a entrada online."; setAuthNotice("Não foi possível carregar a entrada online."); };
-    document.head.appendChild(script);
-  }
-
   function bindEvents() {
     $("#authForm").addEventListener("submit", handleAuthSubmit);
     $("#authModeToggle").addEventListener("click", () => setAuthMode(authMode === "login" ? "signup" : "login"));
@@ -731,7 +721,6 @@
     bindEvents();
     setupPeriodSelect();
     fillDefaultForms();
-    loadGoogleAuth();
     const hashView = window.location.hash.replace("#", "");
     if (VIEWS[hashView]) setView(hashView);
   }

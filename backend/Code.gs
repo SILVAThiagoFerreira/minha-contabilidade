@@ -2,10 +2,11 @@
  * Backend do modo online de Minha contabilidade.
  *
  * O Web App executa como o proprietário e nunca entrega a planilha ao
- * navegador. A identidade vem do ID token do Google; o token não é salvo.
+ * navegador. A identidade vem da conta local criada no aplicativo; somente
+ * um identificador derivado do usuário é usado para particionar as linhas.
  *
  * Armazenamento resiliente por gravação:
- *   1. VaultCurrent: estado atual por conta Google;
+ *   1. VaultCurrent: estado atual por usuário local;
  *   2. VaultJournal: histórico append-only, escrito antes do estado atual;
  *   3. snapshot JSON imutável na pasta privada do Drive.
  *
@@ -17,13 +18,11 @@ const DEFAULT_CONFIG = {
   // Defina DRIVE_FOLDER_ID nas propriedades privadas do Apps Script.
   driveFolderId: "",
   spreadsheetId: "",
-  spreadsheetName: "Minha Contabilidade - Banco",
-  googleClientId: "",
-  allowedEmails: ""
+  spreadsheetName: "Minha Contabilidade - Banco"
 };
 
-const CURRENT_HEADERS = ["subjectId", "email", "revision", "updatedAt", "checksum", "payload"];
-const JOURNAL_HEADERS = ["journalId", "subjectId", "email", "revision", "updatedAt", "checksum", "payload", "source"];
+const CURRENT_HEADERS = ["accountId", "username", "revision", "updatedAt", "checksum", "payload"];
+const JOURNAL_HEADERS = ["journalId", "accountId", "username", "revision", "updatedAt", "checksum", "payload", "source"];
 const MAX_PAYLOAD_BYTES = 450000;
 const MAX_ITEMS_PER_COLLECTION = 10000;
 
@@ -34,7 +33,7 @@ function doGet() {
 function doPost(event) {
   try {
     const body = JSON.parse(event?.postData?.contents || "{}");
-    const identity = verifyIdToken_(body.idToken);
+    const identity = identity_(body);
     if (body.action === "get") return json_(getVault_(identity));
     if (body.action === "sync") return json_(saveVault_(identity, body.payload, body.baseRevision));
     return json_({ ok: false, error: "Ação não reconhecida." }, 400);
@@ -56,30 +55,15 @@ function config_() {
     driveFolderId: properties.getProperty("DRIVE_FOLDER_ID") || DEFAULT_CONFIG.driveFolderId,
     spreadsheetId: properties.getProperty("SPREADSHEET_ID") || DEFAULT_CONFIG.spreadsheetId,
     spreadsheetName: properties.getProperty("SPREADSHEET_NAME") || DEFAULT_CONFIG.spreadsheetName,
-    googleClientId: properties.getProperty("GOOGLE_CLIENT_ID") || DEFAULT_CONFIG.googleClientId,
-    allowedEmails: properties.getProperty("ALLOWED_EMAILS") || DEFAULT_CONFIG.allowedEmails
   };
 }
 
-function verifyIdToken_(idToken) {
-  if (!idToken) throw new Error("Token de autenticação ausente.");
-  const response = UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(idToken), { muteHttpExceptions: true });
-  if (response.getResponseCode() !== 200) throw new Error("Token de autenticação inválido ou expirado.");
-  const token = JSON.parse(response.getContentText());
-  const config = config_();
-  const issuer = String(token.iss || "");
-  const subjectId = String(token.sub || "").trim();
-  const email = String(token.email || "").trim().toLowerCase();
-  const expiresAt = Number(token.exp || 0);
-  const emailVerified = token.email_verified === "true" || token.email_verified === true;
-  if (!config.googleClientId || token.aud !== config.googleClientId) throw new Error("O cliente Google não está configurado corretamente.");
-  if (issuer !== "accounts.google.com" && issuer !== "https://accounts.google.com") throw new Error("Emissor Google inválido.");
-  if (!subjectId || !email) throw new Error("O token não contém uma identidade Google válida.");
-  if (expiresAt && expiresAt <= Math.floor(Date.now() / 1000)) throw new Error("A sessão Google expirou. Entre novamente.");
-  if (!emailVerified) throw new Error("A conta Google precisa estar verificada.");
-  const allowlist = config.allowedEmails.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
-  if (allowlist.length && !allowlist.includes(email)) throw new Error("Esta conta Google não está autorizada para este sistema.");
-  return { subjectId, email };
+function identity_(body) {
+  const accountId = String(body.accountId || "").trim().toLowerCase();
+  const username = String(body.username || "").trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(accountId)) throw new Error("Identificador local inválido.");
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) throw new Error("Usuário local inválido.");
+  return { accountId, username };
 }
 
 function folder_() {
@@ -151,14 +135,14 @@ function jsonPayload_(payload) {
 }
 
 function parseRow_(row, kind) {
-  const offset = kind === "journal" ? { subject: 1, email: 2, revision: 3, updatedAt: 4, checksum: 5, payload: 6 } : { subject: 0, email: 1, revision: 2, updatedAt: 3, checksum: 4, payload: 5 };
+  const offset = kind === "journal" ? { account: 1, username: 2, revision: 3, updatedAt: 4, checksum: 5, payload: 6 } : { account: 0, username: 1, revision: 2, updatedAt: 3, checksum: 4, payload: 5 };
   const payloadText = String(row[offset.payload] || "");
   if (!payloadText || checksum_(payloadText) !== String(row[offset.checksum] || "")) return null;
   let payload;
   try { payload = JSON.parse(payloadText); } catch (error) { return null; }
   return {
-    subjectId: String(row[offset.subject] || ""),
-    email: String(row[offset.email] || "").toLowerCase(),
+    accountId: String(row[offset.account] || ""),
+    username: String(row[offset.username] || "").toLowerCase(),
     revision: Number(row[offset.revision] || 0),
     updatedAt: row[offset.updatedAt],
     checksum: String(row[offset.checksum] || ""),
@@ -178,28 +162,28 @@ function latestJournal_(identity) {
   if (lastRow < 2) return null;
   const rows = sheet.getRange(2, 1, lastRow - 1, JOURNAL_HEADERS.length).getValues();
   return rows.map((row) => parseRow_(row, "journal"))
-    .filter((row) => row && row.subjectId === identity.subjectId)
+    .filter((row) => row && row.accountId === identity.accountId)
     .sort((a, b) => b.revision - a.revision)[0] || null;
 }
 
 function getVault_(identity) {
   const sheet = currentSheet_();
   const match = currentRows_(sheet).map((row) => parseRow_(row, "current"))
-    .find((row) => row && row.subjectId === identity.subjectId);
-  if (match) return { ok: true, email: identity.email, revision: match.revision, updatedAt: match.updatedAt, payload: match.payload, recovered: false };
+    .find((row) => row && row.accountId === identity.accountId);
+  if (match) return { ok: true, username: identity.username, revision: match.revision, updatedAt: match.updatedAt, payload: match.payload, recovered: false };
   const recovered = latestJournal_(identity);
-  if (recovered) return { ok: true, email: identity.email, revision: recovered.revision, updatedAt: recovered.updatedAt, payload: recovered.payload, recovered: true };
-  return { ok: true, email: identity.email, revision: 0, payload: null, recovered: false };
+  if (recovered) return { ok: true, username: identity.username, revision: recovered.revision, updatedAt: recovered.updatedAt, payload: recovered.payload, recovered: true };
+  return { ok: true, username: identity.username, revision: 0, payload: null, recovered: false };
 }
 
 function backupName_(identity, revision) {
-  return "backup-" + checksum_(identity.subjectId).slice(0, 16) + "-r" + revision + "-" + Utilities.formatDate(new Date(), "UTC", "yyyyMMdd-HHmmss") + ".json";
+  return "backup-" + checksum_(identity.accountId).slice(0, 16) + "-r" + revision + "-" + Utilities.formatDate(new Date(), "UTC", "yyyyMMdd-HHmmss") + ".json";
 }
 
 function writeDriveSnapshot_(identity, revision, updatedAt, checksum, payload) {
   const content = JSON.stringify({
     service: "minha-contabilidade",
-    subjectHash: checksum_(identity.subjectId),
+    accountHash: checksum_(identity.accountId),
     revision,
     updatedAt,
     checksum,
@@ -218,7 +202,7 @@ function saveVault_(identity, payload, baseRevision) {
     const sheet = currentSheet_();
     const journal = journalSheet_();
     const rows = currentRows_(sheet);
-    const currentIndex = rows.findIndex((row) => String(row[0] || "") === identity.subjectId);
+    const currentIndex = rows.findIndex((row) => String(row[0] || "") === identity.accountId);
     const current = currentIndex >= 0 ? parseRow_(rows[currentIndex], "current") : null;
     const expectedRevision = Number(baseRevision);
     if (Number.isFinite(expectedRevision) && expectedRevision >= 0 && (current?.revision || 0) !== expectedRevision) {
@@ -230,8 +214,8 @@ function saveVault_(identity, payload, baseRevision) {
 
     // O journal é gravado primeiro. Se a atualização seguinte falhar, o estado
     // válido mais recente ainda pode ser reconstruído por latestJournal_().
-    journal.appendRow([journalId, identity.subjectId, identity.email, revision, updatedAt, checksum, payloadText, "sync"]);
-    const currentValues = [[identity.subjectId, identity.email, revision, updatedAt, checksum, payloadText]];
+    journal.appendRow([journalId, identity.accountId, identity.username, revision, updatedAt, checksum, payloadText, "sync"]);
+    const currentValues = [[identity.accountId, identity.username, revision, updatedAt, checksum, payloadText]];
     if (currentIndex < 0) sheet.getRange(sheet.getLastRow() + 1, 1, 1, CURRENT_HEADERS.length).setValues(currentValues);
     else sheet.getRange(currentIndex + 2, 1, 1, CURRENT_HEADERS.length).setValues(currentValues);
 
@@ -243,7 +227,7 @@ function saveVault_(identity, payload, baseRevision) {
       // O estado atual e o journal já estão persistidos; o aviso não desfaz a gravação.
       backupWarning = "O snapshot do Drive não foi criado nesta tentativa.";
     }
-    return { ok: true, email: identity.email, revision, updatedAt, checksum, backupCreated, backupWarning };
+    return { ok: true, username: identity.username, revision, updatedAt, checksum, backupCreated, backupWarning };
   } finally {
     lock.releaseLock();
   }

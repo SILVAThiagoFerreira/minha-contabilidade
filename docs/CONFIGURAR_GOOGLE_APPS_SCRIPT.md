@@ -1,83 +1,96 @@
-# Ativar login Google e armazenamento no Drive
+# Configurar o armazenamento na planilha e na pasta do Drive
 
-O GitHub Pages continua hospedando somente a interface. Os dados financeiros ficam no Google Apps Script, em uma planilha criada dentro da pasta privada configurada nas propriedades do projeto.
+O GitHub Pages hospeda somente a interface. O Apps Script executa como o proprietário da pasta, grava a contabilidade na planilha e cria snapshots JSON na mesma pasta.
 
-O ID da pasta não fica no frontend, no `config.js` ou no artefato publicado do Pages. O que controla o acesso é o backend executando como o proprietário e usando a propriedade privada `DRIVE_FOLDER_ID`.
+O aplicativo usa apenas o usuário e a senha locais da tela de entrada. Não há login Google, client ID ou validação de conta Google no frontend ou no backend.
 
-## 1. Confirme a privacidade da pasta
+## 1. Configurar a pasta e a planilha
 
-Antes de usar dados reais, abra **Compartilhar** na pasta e deixe o acesso geral como **Restrito**. A pasta e a planilha não podem estar compartilhadas com outros usuários que não possam ver toda a contabilidade.
+Na conta proprietária do Drive:
 
-O filtro feito pelo aplicativo impede que uma conta Google leia a linha de outra conta pela interface. Ele não impede que alguém que tenha acesso direto à planilha abra o arquivo no Drive. Por isso, uma pasta compartilhada com terceiros não serve para garantir isolamento financeiro.
+1. Use a pasta escolhida para o projeto.
+2. Deixe o acesso da pasta como **Restrito**.
+3. Se já existir uma planilha para o banco, informe seu ID na propriedade `SPREADSHEET_ID`.
+4. Se `SPREADSHEET_ID` ficar vazio, o script cria automaticamente **Minha Contabilidade - Banco** dentro da pasta.
 
-## 2. Criar o backend no Apps Script
+O ID da pasta não fica no frontend, no `config.js` ou no artefato publicado do Pages. Ele fica somente nas propriedades privadas do Apps Script.
 
-1. Abra [script.google.com](https://script.google.com/) com a mesma conta proprietária da pasta.
-2. Crie um projeto e copie o conteúdo de [`backend/Code.gs`](../backend/Code.gs).
-3. Em **Configurações do projeto → Propriedades do script**, crie:
+## 2. Publicar o backend
+
+1. Abra [script.google.com](https://script.google.com/) com a conta proprietária da pasta.
+2. Crie ou abra o projeto **Minha Contabilidade - Backend**.
+3. Copie o conteúdo de [`backend/Code.gs`](../backend/Code.gs).
+4. Em **Configurações do projeto → Propriedades do script**, configure:
 
 | Propriedade | Valor |
 |---|---|
-| `DRIVE_FOLDER_ID` | ID da pasta privada escolhida no Google Drive |
-| `GOOGLE_CLIENT_ID` | client ID OAuth da aplicação Web |
-| `ALLOWED_EMAILS` | opcional; e-mails separados por vírgula |
-
-`SPREADSHEET_ID` é opcional. Se ficar vazio, o script cria automaticamente **Minha Contabilidade - Banco** dentro da pasta e cria as abas de armazenamento na primeira chamada.
-
-Não salve token, senha ou segredo OAuth no código do GitHub. O client ID web pode aparecer no frontend; o client secret nunca deve aparecer.
-
-## 3. Criar o client ID Google
-
-No Google Cloud Console:
-
-1. Selecione ou crie um projeto.
-2. Configure a tela de consentimento OAuth para uso externo/pessoal.
-3. Crie uma credencial **OAuth Client ID → Aplicativo da Web**.
-4. Adicione como origem JavaScript autorizada:
-
-```text
-https://silvathiagoferreira.github.io
-```
-
-Use esse valor em `GOOGLE_CLIENT_ID` no Apps Script e em `config.js` no repositório.
-
-## 4. Publicar o Web App
+| `DRIVE_FOLDER_ID` | ID da pasta escolhida no Google Drive |
+| `SPREADSHEET_ID` | Opcional; ID da planilha existente |
+| `SPREADSHEET_NAME` | Opcional; padrão `Minha Contabilidade - Banco` |
 
 Em **Implantar → Nova implantação → Aplicativo da Web**:
 
-- executar como: **eu / sua conta**;
-- quem tem acesso: **qualquer pessoa com conta Google**;
+- executar como: **eu / proprietário da pasta**;
+- quem tem acesso: **qualquer pessoa**;
 - copie a URL que termina em `/exec`.
 
-O Apps Script valida o token no endpoint oficial do Google, verifica emissor, audiência, validade, e-mail verificado e, se preenchido, a lista `ALLOWED_EMAILS`. O identificador de partição é o `sub` estável da conta Google; o e-mail é guardado apenas como atributo auxiliar.
+Na primeira autorização do Apps Script, o proprietário precisa permitir o acesso do script ao Drive e ao Sheets. Isso é a autorização do próprio backend para gravar os arquivos; não é login Google no aplicativo.
 
-## 5. Ligar o frontend
+## 3. Ligar o frontend
 
-Edite `config.js`:
+Edite `config.js` com a URL `/exec`:
 
 ```js
 window.FINANCE_CONFIG = Object.freeze({
-  apiUrl: "https://script.google.com/macros/s/SEU_DEPLOYMENT_ID/exec",
-  googleClientId: "SEU_CLIENT_ID.apps.googleusercontent.com"
+  apiUrl: "https://script.google.com/macros/s/SEU_DEPLOYMENT_ID/exec"
 });
 ```
 
-Depois, publique a alteração no GitHub Pages. O botão **Entrar com Google** aparecerá no login. O modo local com senha continua disponível como fallback, mas ele fica preso ao navegador e não substitui o armazenamento online.
+Depois, publique a alteração no GitHub Pages. O login continua sendo feito com usuário e senha locais. Ao entrar ou criar uma conta, o aplicativo consulta a planilha; as alterações seguintes são sincronizadas automaticamente.
 
-## Como a recuperação funciona
+Se `apiUrl` ficar vazio, o sistema continua funcionando no modo local, mas os dados ficam somente no navegador.
 
-Cada sincronização remota é gravada nesta ordem:
+## 4. Como os dados são separados
+
+O frontend calcula um identificador estável a partir do nome de usuário local. O Apps Script usa esse identificador para encontrar a linha correta; a senha não é enviada nem armazenada na planilha.
+
+As chamadas usam este contrato:
+
+```json
+{
+  "action": "get",
+  "accountId": "hash-do-usuario",
+  "username": "thiago"
+}
+```
+
+```json
+{
+  "action": "sync",
+  "accountId": "hash-do-usuario",
+  "username": "thiago",
+  "payload": {},
+  "baseRevision": 3
+}
+```
+
+O backend valida o formato do identificador e do usuário antes de acessar a planilha. O isolamento entre usuários é uma convenção do login local; o endpoint não usa OAuth.
+
+## 5. Recuperação e cópias
+
+Cada sincronização é gravada nesta ordem:
 
 1. `VaultJournal`: adiciona uma nova linha sem apagar revisões anteriores;
-2. `VaultCurrent`: atualiza o estado corrente daquele `sub`;
+2. `VaultCurrent`: atualiza o estado corrente daquele usuário;
 3. pasta do Drive: cria um snapshot JSON novo, sem sobrescrever o anterior.
 
-O backend usa `LockService` para serializar gravações, calcula SHA-256 do payload e verifica o checksum ao ler. Se o estado corrente estiver corrompido, a última revisão válida do journal é devolvida. Uma revisão otimista também bloqueia que uma aba antiga sobrescreva uma alteração feita em outro dispositivo.
+O backend usa `LockService`, calcula SHA-256 do payload e verifica o checksum ao ler. Se o estado corrente estiver corrompido, a última revisão válida do journal é devolvida. O controle de `baseRevision` evita que uma aba antiga sobrescreva uma alteração mais nova por acidente.
 
-O histórico de versões da própria planilha e os snapshots do Drive acrescentam camadas de recuperação. Os snapshots não são apagados automaticamente. Mesmo assim, nenhum fornecedor ou sistema oferece chance matemática zero de perda; para dados importantes, mantenha também uma exportação periódica em outra conta ou mídia offline.
+Os snapshots não são apagados automaticamente. O aplicativo também mantém exportação manual em JSON na tela de configurações.
 
-## Limites de privacidade
+## 6. Observações práticas
 
-O Apps Script e o proprietário da planilha conseguem ler o JSON armazenado. O login Google autentica e separa usuários, mas não é criptografia ponta a ponta. Se for necessário impedir a leitura até do proprietário do backend, será preciso adicionar uma senha-mestra/chave de recuperação e criptografar o payload no navegador antes do envio.
-
-Não coloque dados reais em `config.js`, no repositório ou no GitHub Pages. A planilha, o journal e os snapshots devem permanecer somente no Drive privado.
+- O JSON armazenado pelo Apps Script fica legível para o proprietário da planilha.
+- A URL do endpoint precisa estar no `config.js` para o site sincronizar.
+- Não coloque o ID da pasta, a URL da planilha ou dados financeiros no repositório.
+- Se a planilha antiga tiver dados criados pelo fluxo Google anterior, exporte esses dados e importe-os na conta local desejada; os identificadores antigos não são os mesmos do login local.

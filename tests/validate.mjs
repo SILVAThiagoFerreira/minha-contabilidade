@@ -16,9 +16,12 @@ const workflow = await fs.readFile(path.join(root, ".github/workflows/deploy-pag
 const backend = await fs.readFile(path.join(root, "backend/Code.gs"), "utf8");
 
 for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "fixos", "cdb", "analises", "configuracoes"]) assert.match(html, new RegExp(marker), `seção ausente: ${marker}`);
-for (const marker of ["PBKDF2", "AES-GCM", "saveCurrentVault", "renderAnalyses", "loadGoogleAuth", "AbortController", "baseRevision"]) assert.match(js, new RegExp(marker), `regra ausente: ${marker}`);
+for (const marker of ["PBKDF2", "AES-GCM", "saveCurrentVault", "renderAnalyses", "remoteAccountId", "AbortController", "baseRevision"]) assert.match(js, new RegExp(marker), `regra ausente: ${marker}`);
 assert.match(workflow, /actions\/deploy-pages@v4/);
-for (const marker of ["verifyIdToken_", "DRIVE_FOLDER_ID", "subjectId", "VaultJournal", "LockService", "checksum_", "createFile"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
+for (const marker of ["identity_", "DRIVE_FOLDER_ID", "accountId", "VaultJournal", "LockService", "checksum_", "createFile"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
+assert.doesNotMatch(html, /googleAuth|googleButton|Entrar com Google/i, "o login Google não deve aparecer na interface");
+assert.doesNotMatch(js, /googleClientId|loadGoogleAuth|handleGoogleCredential|gsi\/client|idToken/i, "o frontend não deve depender do login Google");
+assert.doesNotMatch(backend, /verifyIdToken_|oauth2\.googleapis|GOOGLE_CLIENT_ID|ALLOWED_EMAILS|idToken/i, "o backend não deve validar login Google");
 assert.doesNotMatch(html, /Enaex|enaex/i, "a marca de referência não deve aparecer na interface");
 assert.doesNotMatch(js, /password\s*[:=]\s*["'][^"']+["']/i, "não deve haver senha fixa no código");
 console.log(`validate: ${required.length} arquivos e contratos principais OK`);

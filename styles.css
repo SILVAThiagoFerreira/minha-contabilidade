@@ -83,11 +83,6 @@ h1, h2, h3, strong { font-family: var(--display); }
 .form-notice { min-height: 20px; color: var(--red-deep); font-size: 12px; }
 .form-notice.is-success { color: var(--green); }
 .auth-privacy { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
-.google-auth { margin-top: 20px; }
-.google-auth p { margin-top: 10px; color: var(--muted); font-size: 11px; }
-.or-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; color: var(--muted); font-size: 11px; }
-.or-divider::before, .or-divider::after { flex: 1; height: 1px; content: ""; background: var(--line); }
-
 /* App frame */
 .app-shell { display: flex; min-height: 100vh; }
 .sidebar { position: sticky; top: 0; display: flex; flex: 0 0 242px; flex-direction: column; width: 242px; min-height: 100vh; padding: 26px 17px 18px; color: #d6dfe4; background: var(--navy); }
