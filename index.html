@@ -52,10 +52,10 @@
             </label>
             <button class="button button--primary button--wide" type="submit" id="authSubmit">Entrar</button>
           </form>
-          <div id="googleAuthArea" class="google-auth is-hidden">
+          <div id="googleAuthArea" class="google-auth">
             <div class="or-divider"><span>ou, com Google</span></div>
             <div id="googleButton"></div>
-            <p>Disponível quando o modo online estiver configurado.</p>
+            <p id="googleAuthHint">Login Google preparado; será ativado quando o endpoint seguro e o client ID forem publicados.</p>
           </div>
           <p id="authNotice" class="form-notice" role="status"></p>
           <button id="authModeToggle" class="text-button" type="button">Criar uma conta local</button>
@@ -183,7 +183,7 @@
           <section class="view" data-view="configuracoes">
             <div class="view-intro"><div><p class="eyebrow">CONTROLE E PRIVACIDADE</p><h1>Configurações</h1><p class="view-lede">Escolha como guardar seus dados e mantenha uma cópia quando quiser.</p></div></div>
             <div class="settings-grid"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PERFIL</p><h3>Seu cadastro</h3></div></div><form id="profileForm" class="stack-form"><label class="field"><span>Como quer ser chamado?</span><input name="displayName" id="profileDisplayName" required /></label><label class="field"><span>Moeda</span><select name="currency"><option value="BRL">Real brasileiro (R$)</option></select></label><button class="button button--secondary" type="submit">Salvar perfil</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">DADOS</p><h3>Importar e exportar</h3></div></div><p class="settings-copy">A exportação é um arquivo JSON legível. Guarde-o em local seguro: ele contém os seus lançamentos.</p><div class="settings-actions"><button class="button button--secondary" data-action="export-data" type="button">Baixar meus dados</button><label class="button button--ghost file-button">Importar JSON<input id="importDataInput" type="file" accept="application/json,.json" /></label></div><button class="danger-link" type="button" data-action="clear-all">Apagar todos os dados deste usuário</button></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ARMAZENAMENTO</p><h3 id="storageTitle">Local protegido</h3></div><span class="status-pill status-pill--green" id="storagePill">ATIVO</span></div><p id="storageDescription" class="settings-copy">Os dados são criptografados antes de serem guardados neste navegador. A senha não é armazenada.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span id="storageDetail">Nenhum dado é enviado para a internet neste modo.</span></div></article></div>
-            <article class="remote-info panel"><span class="note-mark">↗</span><div><h3>Modo online opcional</h3><p>Se você configurar o endpoint do Google Apps Script em <code>config.js</code>, o botão de entrada com Google passa a sincronizar a sua conta em uma linha privada da planilha. A configuração está documentada no repositório; o modo local continua funcionando sem ela.</p></div></article>
+            <article class="remote-info panel"><span class="note-mark">↗</span><div><h3>Armazenamento online com Google</h3><p>Quando o endpoint do Apps Script estiver publicado, o login Google sincroniza somente o cofre da conta autenticada. Cada gravação gera estado atual, histórico de recuperação e snapshot no Drive; mantenha a pasta com acesso restrito.</p></div></article>
           </section>
         </main>
       </section>

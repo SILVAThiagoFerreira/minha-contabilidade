@@ -14,12 +14,15 @@ Painel pessoal para organizar entradas, saídas, contas bancárias, custos fixos
 - módulo específico para CDB, com taxa, liquidez e vencimento;
 - análises mensais, categorias e taxa de sobra;
 - exportação e importação manual de backup JSON;
-- modo online opcional com Google Apps Script e Google Sheets;
+- modo online com login Google, Google Apps Script e Google Sheets/Drive;
+- armazenamento resiliente com estado atual, journal append-only, checksum e snapshots;
 - workflow de GitHub Pages.
 
 ## Segurança e limite do GitHub Pages
 
-GitHub Pages não é um servidor de aplicação nem um banco de dados. Por isso, o site publicado não carrega dados financeiros reais e não contém segredos. Sem configuração adicional, ele usa o modo local protegido. Para sincronização online por usuário, configure o backend documentado em [`docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md`](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md) e mantenha a planilha privada.
+GitHub Pages não é um servidor de aplicação nem um banco de dados. Por isso, o site publicado não carrega dados financeiros reais e não contém segredos. O login Google e a sincronização online usam o backend documentado em [`docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md`](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). A pasta do Drive precisa estar com acesso restrito; se outras pessoas puderem abrir a planilha diretamente, elas poderão ver os dados independentemente do filtro por usuário.
+
+O backend armazena uma revisão corrente por conta Google, mantém um journal sem sobrescrita e cria snapshots JSON novos na pasta `ACCOUNTANT`. Isso reduz o risco de perda e permite recuperar a última revisão válida, mas uma segunda cópia independente continua recomendada para uma contabilidade importante.
 
 O módulo CDB trata projeções como estimativas. A projeção mensal só é calculada para uma taxa prefixada cadastrada e não substitui o extrato da instituição, impostos ou variações do CDI.
 

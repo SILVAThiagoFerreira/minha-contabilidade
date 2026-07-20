@@ -171,11 +171,19 @@
     return { record, material, loadedVault: normalizeVault(await decryptVault(record.vault, material.key)) };
   }
 
-  async function remoteRequest(action, idToken, payload) {
+  async function remoteRequest(action, idToken, payload, baseRevision) {
     if (!CONFIG.apiUrl) throw new Error("O endpoint online ainda não foi configurado.");
-    const response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, idToken, payload }) });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, idToken, payload, baseRevision }), signal: controller.signal });
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("O armazenamento online demorou demais para responder.");
+      throw new Error("Não foi possível alcançar o armazenamento online.");
+    } finally { window.clearTimeout(timeout); }
     const result = await response.json();
-    if (!response.ok || result.error) throw new Error(result.error || "Não foi possível falar com o armazenamento online.");
+    if (!response.ok || result.ok === false || result.error || Number(result.statusCode) >= 400) throw new Error(result.error || "Não foi possível falar com o armazenamento online.");
     return result;
   }
 
@@ -184,7 +192,9 @@
     vault.updatedAt = new Date().toISOString();
     saveQueue = saveQueue.catch(() => {}).then(async () => {
       if (session.mode === "remote") {
-        await remoteRequest("sync", session.idToken, vault);
+        const result = await remoteRequest("sync", session.idToken, vault, session.revision || 0);
+        session.revision = Number(result.revision || session.revision || 0);
+        if (result.backupWarning) showToast(result.backupWarning, "error");
         return;
       }
       const accounts = getLocalAccounts();
@@ -647,16 +657,22 @@
     setAuthNotice("Entrando com Google…");
     try {
       const result = await remoteRequest("get", response.credential);
-      session = { mode: "remote", idToken: response.credential, email: result.email };
+      session = { mode: "remote", idToken: response.credential, email: result.email, revision: Number(result.revision || 0) };
       vault = normalizeVault(result.payload || blankVault(result.email.split("@")[0]));
       enterApp();
-      showToast("Conta online conectada.");
+      showToast(result.recovered ? "Conta conectada; a última revisão válida foi recuperada." : "Conta online conectada.");
     } catch (error) { setAuthNotice(error.message || "Não foi possível conectar ao modo online."); }
   }
 
   function loadGoogleAuth() {
-    if (!CONFIG.apiUrl || !CONFIG.googleClientId) return;
-    $("#googleAuthArea").classList.remove("is-hidden");
+    const area = $("#googleAuthArea");
+    const hint = $("#googleAuthHint");
+    area.classList.remove("is-hidden");
+    if (!CONFIG.apiUrl || !CONFIG.googleClientId) {
+      hint.textContent = "Login Google preparado; falta publicar o endpoint Apps Script e informar o client ID em config.js.";
+      return;
+    }
+    hint.textContent = "Use sua conta Google. Os dados serão separados pelo identificador da conta e sincronizados no Drive privado.";
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
@@ -665,7 +681,7 @@
       window.google.accounts.id.initialize({ client_id: CONFIG.googleClientId, callback: handleGoogleCredential });
       window.google.accounts.id.renderButton($("#googleButton"), { theme: "outline", size: "large", width: 360, text: "signin_with" });
     };
-    script.onerror = () => setAuthNotice("Não foi possível carregar a entrada online.");
+    script.onerror = () => { hint.textContent = "Não foi possível carregar a entrada online."; setAuthNotice("Não foi possível carregar a entrada online."); };
     document.head.appendChild(script);
   }
 
