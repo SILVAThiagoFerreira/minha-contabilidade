@@ -39,4 +39,4 @@ Contas cadastradas como poupança aparecem em “Contas > Gerenciar rendimento�
 
 ## Publicação
 
-O workflow .github/workflows/deploy-pages.yml publica somente os quatro arquivos estáticos da interface a cada push para main. Backend, documentação e materiais de referência não fazem parte do artefato servido.
+O branch `gh-pages` publica somente os quatro arquivos estáticos da interface. Backend, documentação e materiais de referência não fazem parte do artefato servido; a publicação é feita com `npx gh-pages` a partir do diretório de artefatos estáticos.
