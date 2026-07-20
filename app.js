@@ -2,7 +2,6 @@
   "use strict";
 
   const CONFIG = window.FINANCE_CONFIG || {};
-  const ACCOUNT_STORAGE_KEY = "minha-contabilidade:accounts:v1";
   const VIEWS = {
     dashboard: "Visão geral",
     lancamentos: "Lançamentos",
@@ -17,11 +16,9 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
   let authMode = "login";
   let session = null;
   let vault = null;
-  let cryptoKey = null;
   let saveQueue = Promise.resolve();
 
   const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "numeric" });
@@ -85,45 +82,6 @@
     return Number(normalized) || 0;
   }
 
-  function base64FromBytes(bytes) {
-    let binary = "";
-    bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
-    return btoa(binary);
-  }
-
-  function bytesFromBase64(value) {
-    const binary = atob(value);
-    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  }
-
-  async function derivePasswordMaterial(password, saltBytes) {
-    const imported = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits", "deriveKey"]);
-    const [bits, key] = await Promise.all([
-      crypto.subtle.deriveBits({ name: "PBKDF2", salt: saltBytes, iterations: 120000, hash: "SHA-256" }, imported, 256),
-      crypto.subtle.deriveKey({ name: "PBKDF2", salt: saltBytes, iterations: 120000, hash: "SHA-256" }, imported, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"])
-    ]);
-    return { verifier: base64FromBytes(new Uint8Array(bits)), key };
-  }
-
-  async function encryptVault(value, key) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoder.encode(JSON.stringify(value)));
-    return { iv: base64FromBytes(iv), data: base64FromBytes(new Uint8Array(data)) };
-  }
-
-  async function decryptVault(payload, key) {
-    const data = await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytesFromBase64(payload.iv) }, key, bytesFromBase64(payload.data));
-    return JSON.parse(decoder.decode(data));
-  }
-
-  function getLocalAccounts() {
-    try { return JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "[]"); } catch { return []; }
-  }
-
-  function saveLocalAccounts(accounts) {
-    localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
-  }
-
   function blankVault(displayName = "") {
     return {
       version: 1,
@@ -132,7 +90,6 @@
       transactions: [],
       fixedCosts: [],
       cdbs: [],
-      hasSamples: false,
       updatedAt: new Date().toISOString()
     };
   }
@@ -147,42 +104,18 @@
     return normalized;
   }
 
-  async function createLocalAccount(username, password, displayName) {
-    const cleanUsername = username.trim().toLowerCase();
-    const accounts = getLocalAccounts();
-    if (!/^[a-z0-9._-]{3,32}$/.test(cleanUsername)) throw new Error("Use um usuário com 3 a 32 caracteres, sem espaços.");
-    if (password.length < 8) throw new Error("A senha precisa ter pelo menos 8 caracteres.");
-    if (accounts.some((item) => item.username === cleanUsername)) throw new Error("Esse usuário já existe neste navegador.");
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const material = await derivePasswordMaterial(password, salt);
-    const initialVault = blankVault(displayName || cleanUsername);
-    const record = { id: uid("user"), username: cleanUsername, displayName: displayName || cleanUsername, salt: base64FromBytes(salt), verifier: material.verifier, vault: await encryptVault(initialVault, material.key), createdAt: new Date().toISOString() };
-    accounts.push(record);
-    saveLocalAccounts(accounts);
-    return { record, material, initialVault };
-  }
-
-  async function loginLocal(username, password) {
-    const cleanUsername = username.trim().toLowerCase();
-    const record = getLocalAccounts().find((item) => item.username === cleanUsername);
-    if (!record) throw new Error("Usuário ou senha inválidos.");
-    const material = await derivePasswordMaterial(password, bytesFromBase64(record.salt));
-    if (material.verifier !== record.verifier) throw new Error("Usuário ou senha inválidos.");
-    return { record, material, loadedVault: normalizeVault(await decryptVault(record.vault, material.key)) };
-  }
-
   async function remoteAccountId(username) {
     const digest = await crypto.subtle.digest("SHA-256", encoder.encode(username.trim().toLowerCase()));
     return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 
-  async function remoteRequest(action, identity, payload, baseRevision) {
+  async function remoteRequest(action, credentials, payload, baseRevision) {
     if (!CONFIG.apiUrl) throw new Error("O endpoint online ainda não foi configurado.");
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 15000);
     let response;
     try {
-      response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, accountId: identity.accountId, username: identity.username, payload, baseRevision }), signal: controller.signal });
+      response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, accountId: credentials.accountId, username: credentials.username, password: credentials.password, payload, baseRevision }), signal: controller.signal });
     } catch (error) {
       if (error.name === "AbortError") throw new Error("O armazenamento online demorou demais para responder.");
       throw new Error("Não foi possível alcançar o armazenamento online.");
@@ -192,28 +125,15 @@
     return result;
   }
 
-  async function cacheLocalVault() {
-    const accounts = getLocalAccounts();
-    const index = accounts.findIndex((item) => item.id === session?.recordId);
-    if (index === -1 || !cryptoKey) return;
-    accounts[index].vault = await encryptVault(vault, cryptoKey);
-    accounts[index].displayName = vault.profile.displayName;
-    saveLocalAccounts(accounts);
-  }
-
-  async function openAccount(record, material, fallbackVault) {
-    cryptoKey = material.key;
-    const identity = { accountId: await remoteAccountId(record.username), username: record.username };
-    if (!CONFIG.apiUrl) {
-      session = { mode: "local", recordId: record.id, ...identity };
-      vault = fallbackVault;
-      return { online: false, recovered: false };
-    }
-    const result = await remoteRequest("get", identity);
-    session = { mode: "online", recordId: record.id, ...identity, revision: Number(result.revision || 0) };
-    vault = normalizeVault(result.payload || fallbackVault);
-    if (result.payload) await cacheLocalVault();
-    else await saveCurrentVault();
+  async function openRemoteAccount(username, password, displayName, signup) {
+    const cleanUsername = username.trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,32}$/.test(cleanUsername)) throw new Error("Use um usuário com 3 a 32 caracteres, sem espaços.");
+    if (password.length < 8) throw new Error("A senha precisa ter pelo menos 8 caracteres.");
+    const identity = { accountId: await remoteAccountId(cleanUsername), username: cleanUsername, password };
+    const result = await remoteRequest(signup ? "register" : "login", identity);
+    session = { mode: "online", ...identity, revision: Number(result.revision || 0) };
+    vault = normalizeVault(result.payload || blankVault(result.displayName || displayName || cleanUsername));
+    if (!result.payload) await saveCurrentVault();
     return { online: true, recovered: Boolean(result.recovered) };
   }
 
@@ -221,14 +141,9 @@
     if (!vault || !session) return;
     vault.updatedAt = new Date().toISOString();
     saveQueue = saveQueue.catch(() => {}).then(async () => {
-      if (session.mode === "online") {
-        const result = await remoteRequest("sync", session, vault, session.revision || 0);
-        session.revision = Number(result.revision || session.revision || 0);
-        if (result.backupWarning) showToast(result.backupWarning, "error");
-        await cacheLocalVault();
-        return;
-      }
-      await cacheLocalVault();
+      const result = await remoteRequest("sync", session, vault, session.revision || 0);
+      session.revision = Number(result.revision || session.revision || 0);
+      if (result.backupWarning) showToast(result.backupWarning, "error");
     }).catch((error) => { showToast(error.message, "error"); throw error; });
     return saveQueue;
   }
@@ -252,10 +167,10 @@
   function setAuthMode(mode) {
     authMode = mode;
     const signup = mode === "signup";
-    $("#authTitle").textContent = signup ? "Criar conta local" : "Entrar no painel";
-    $("#authSubtitle").textContent = signup ? "Uma conta separada para os seus dados neste navegador." : "Acompanhe seu dinheiro sem planilhas espalhadas.";
+    $("#authTitle").textContent = signup ? "Criar conta online" : "Entrar no painel";
+    $("#authSubtitle").textContent = signup ? "Seu cadastro e seus dados ficam na planilha online." : "Acompanhe seu dinheiro sem planilhas espalhadas.";
     $("#authSubmit").textContent = signup ? "Criar conta" : "Entrar";
-    $("#authModeToggle").textContent = signup ? "Já tenho uma conta" : "Criar uma conta local";
+    $("#authModeToggle").textContent = signup ? "Já tenho uma conta" : "Criar uma conta online";
     $("#confirmPasswordField").classList.toggle("is-hidden", !signup);
     $("#authPassword").setAttribute("autocomplete", signup ? "new-password" : "current-password");
     setAuthNotice("");
@@ -267,8 +182,8 @@
     const displayName = vault.profile.displayName || session.username || "Usuário";
     $("#sidebarUserName").textContent = displayName;
     $("#sidebarAvatar").textContent = displayName.trim().charAt(0).toUpperCase() || "M";
-    $("#sidebarUserMode").textContent = session.mode === "online" ? "planilha sincronizada" : "local protegido";
-    $("#syncBadge").innerHTML = `<span class="status-dot status-dot--green"></span>${session.mode === "online" ? "sincronizado" : "protegido"}`;
+    $("#sidebarUserMode").textContent = "planilha sincronizada";
+    $("#syncBadge").innerHTML = '<span class="status-dot status-dot--green"></span>sincronizado';
     setView("dashboard");
     renderAll();
   }
@@ -276,7 +191,6 @@
   function leaveApp() {
     session = null;
     vault = null;
-    cryptoKey = null;
     $("#appShell").classList.add("is-hidden");
     $("#authScreen").classList.remove("is-hidden");
     $("#authForm").reset();
@@ -360,7 +274,6 @@
       metricCard("SAÍDAS", formatShortCurrency(expense), "no período selecionado", ""),
       metricCard("RESULTADO", formatShortCurrency(result), income ? `${savingsRate}% de sobra no mês` : "adicione uma entrada para calcular", result >= 0 ? "metric-card--positive" : "metric-card--warning")
     ].join("");
-    $("#demoBanner").classList.toggle("is-hidden", !vault.hasSamples);
     renderCashflow();
     renderCategories(periodTransactions);
     renderUpcomingFixedCosts();
@@ -468,10 +381,10 @@
 
   function renderSettings() {
     $("#profileDisplayName").value = vault.profile.displayName || "";
-    $("#storageTitle").textContent = session.mode === "online" ? "Planilha sincronizada" : "Local protegido";
-    $("#storagePill").textContent = session.mode === "online" ? "ONLINE" : "ATIVO";
-    $("#storageDescription").textContent = session.mode === "online" ? "As alterações são enviadas à planilha e aos snapshots da pasta do Drive usando o seu usuário local." : "Os dados são criptografados antes de serem guardados neste navegador. A senha não é armazenada.";
-    $("#storageDetail").textContent = session.mode === "online" ? "Sincronização com Google Sheets/Drive configurada." : "Nenhum dado é enviado para a internet neste modo.";
+    $("#storageTitle").textContent = "Planilha sincronizada";
+    $("#storagePill").textContent = "ONLINE";
+    $("#storageDescription").textContent = "Os lançamentos são gravados na planilha e recebem snapshots automáticos na pasta do Drive.";
+    $("#storageDetail").textContent = "A planilha online é a fonte oficial dos seus dados.";
   }
 
   function renderAll() {
@@ -503,37 +416,6 @@
     clearForm($("#cdbForm"));
   }
 
-  function sampleVault() {
-    const period = currentPeriod();
-    const accountA = uid("account");
-    const accountB = uid("account");
-    return {
-      ...blankVault(vault.profile.displayName),
-      profile: { ...vault.profile },
-      hasSamples: true,
-      accounts: [{ id: accountA, name: "Banco principal", type: "corrente", balance: 2450, nickname: "conta do dia a dia" }, { id: accountB, name: "Reserva", type: "poupanca", balance: 7200, nickname: "segurança" }],
-      transactions: [
-        { id: uid("tx"), date: `${period}-02`, description: "Salário", category: "Renda", accountId: accountA, amount: 4820, type: "entrada", notes: "exemplo", sample: true },
-        { id: uid("tx"), date: `${period}-04`, description: "Aluguel", category: "Moradia", accountId: accountA, amount: 1250, type: "saida", notes: "exemplo", sample: true },
-        { id: uid("tx"), date: `${period}-08`, description: "Mercado", category: "Alimentação", accountId: accountA, amount: 386.4, type: "saida", notes: "exemplo", sample: true },
-        { id: uid("tx"), date: `${period}-12`, description: "Combustível", category: "Transporte", accountId: accountA, amount: 250, type: "saida", notes: "exemplo", sample: true },
-        { id: uid("tx"), date: `${period}-16`, description: "Transferência para reserva", category: "Investimentos", accountId: accountB, amount: 400, type: "entrada", notes: "exemplo", sample: true },
-        { id: uid("tx"), date: `${period}-16`, description: "Transferência para reserva", category: "Investimentos", accountId: accountA, amount: 400, type: "saida", notes: "exemplo", sample: true }
-      ],
-      fixedCosts: [{ id: uid("fixed"), name: "Internet", category: "Casa", amount: 99.9, dueDay: 10, accountId: accountA, active: true, sample: true }, { id: uid("fixed"), name: "Plano de celular", category: "Assinaturas", amount: 69.9, dueDay: 18, accountId: accountA, active: true, sample: true }],
-      cdbs: [{ id: uid("cdb"), name: "CDB liquidez diária", bank: "Banco reserva", principal: 5000, rate: 10.8, rateType: "pre", startedAt: `${period}-01`, maturityAt: "2027-01-01", liquidity: "Liquidez diária", sample: true }]
-    };
-  }
-
-  async function applySampleData() {
-    const hasRealData = vault.accounts.some((item) => !item.sample) || vault.transactions.some((item) => !item.sample) || vault.fixedCosts.some((item) => !item.sample) || vault.cdbs.some((item) => !item.sample);
-    if (hasRealData && !window.confirm("Os exemplos vão substituir somente os dados atuais. Continuar?")) return;
-    vault = sampleVault();
-    await saveCurrentVault();
-    renderAll();
-    showToast("Exemplos adicionados. Eles estão marcados como ilustrativos.");
-  }
-
   async function deleteById(collection, id, message) {
     if (!window.confirm(message)) return;
     vault[collection] = vault[collection].filter((item) => item.id !== id);
@@ -550,14 +432,12 @@
     try {
       if (authMode === "signup") {
         if (data.password !== data.passwordConfirm) throw new Error("As senhas não conferem.");
-        const result = await createLocalAccount(data.username, data.password, data.username);
-        const opened = await openAccount(result.record, result.material, result.initialVault);
+        const opened = await openRemoteAccount(data.username, data.password, data.username, true);
         setAuthNotice("Conta criada.", true);
         enterApp();
-        showToast(opened.online ? "Conta criada e sincronizada na planilha." : "Conta local criada com proteção por senha.");
+        showToast("Conta criada e sincronizada na planilha.");
       } else {
-        const result = await loginLocal(data.username, data.password);
-        const opened = await openAccount(result.record, result.material, result.loadedVault);
+        const opened = await openRemoteAccount(data.username, data.password, data.username, false);
         enterApp();
         if (opened.recovered) showToast("Dados recuperados do histórico da planilha.");
       }
@@ -643,30 +523,6 @@
     showToast("Perfil atualizado.");
   }
 
-  function exportData() {
-    const payload = JSON.stringify({ app: "Minha contabilidade", exportedAt: new Date().toISOString(), data: vault }, null, 2);
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
-    link.download = `minha-contabilidade-${todayIso()}.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    showToast("Cópia dos dados preparada para download.");
-  }
-
-  async function importData(file) {
-    if (!file) return;
-    try {
-      const content = JSON.parse(await file.text());
-      const imported = normalizeVault(content.data || content);
-      if (!Array.isArray(imported.transactions) || !Array.isArray(imported.accounts)) throw new Error("Arquivo sem estrutura reconhecida.");
-      if (!window.confirm("Importar este arquivo substituirá os dados atuais deste usuário. Continuar?")) return;
-      vault = imported;
-      await saveCurrentVault();
-      renderAll();
-      showToast("Dados importados.");
-    } catch (error) { showToast(error.message || "Arquivo inválido.", "error"); }
-  }
-
   async function clearAllData() {
     if (!window.confirm("Apagar todos os lançamentos, contas, custos fixos e CDBs deste usuário? Essa ação não pode ser desfeita.")) return;
     vault = blankVault(vault.profile.displayName);
@@ -687,25 +543,12 @@
     $("#fixedCostForm").addEventListener("submit", handleFixedSubmit);
     $("#cdbForm").addEventListener("submit", handleCdbSubmit);
     $("#profileForm").addEventListener("submit", handleProfileSubmit);
-    $("#importDataInput").addEventListener("change", (event) => importData(event.target.files[0]));
     document.addEventListener("click", async (event) => {
       const target = event.target.closest("[data-view-target], [data-view-link], [data-action]");
       if (!target) return;
       if (target.dataset.viewTarget || target.dataset.viewLink) { setView(target.dataset.viewTarget || target.dataset.viewLink); return; }
       const action = target.dataset.action;
       if (action === "open-transaction") { setView("lancamentos"); window.setTimeout(() => $("#transactionFormPanel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); }
-      if (action === "load-sample") await applySampleData();
-      if (action === "clear-sample") {
-        vault.accounts = vault.accounts.filter((item) => !item.sample);
-        vault.transactions = vault.transactions.filter((item) => !item.sample);
-        vault.fixedCosts = vault.fixedCosts.filter((item) => !item.sample);
-        vault.cdbs = vault.cdbs.filter((item) => !item.sample);
-        vault.hasSamples = false;
-        await saveCurrentVault();
-        renderAll();
-        showToast("Exemplos removidos; seus dados foram preservados.");
-      }
-      if (action === "export-data") exportData();
       if (action === "clear-all") await clearAllData();
       if (action === "delete-transaction") await deleteById("transactions", target.dataset.id, "Excluir este lançamento?");
       if (action === "edit-transaction") editTransaction(target.dataset.id);
@@ -717,7 +560,8 @@
   }
 
   function start() {
-    if (!window.crypto?.subtle) { setAuthNotice("Este navegador não oferece a proteção criptográfica necessária."); return; }
+    if (!window.crypto?.subtle) { setAuthNotice("Este navegador não oferece a conexão segura necessária."); return; }
+    if (!CONFIG.apiUrl) { setAuthNotice("O armazenamento online ainda não foi configurado."); return; }
     bindEvents();
     setupPeriodSelect();
     fillDefaultForms();

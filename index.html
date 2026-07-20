@@ -27,7 +27,7 @@
           <div><span>SAÍDAS</span><strong>− R$ 2.146</strong></div>
           <div><span>RESERVA</span><strong>R$ 18.400</strong></div>
         </div>
-        <small class="auth-note">Dados pessoais ficam protegidos por sua senha neste dispositivo.</small>
+        <small class="auth-note">Seu cadastro e seus dados ficam armazenados online na planilha.</small>
       </section>
 
       <section class="auth-panel">
@@ -53,8 +53,8 @@
             <button class="button button--primary button--wide" type="submit" id="authSubmit">Entrar</button>
           </form>
           <p id="authNotice" class="form-notice" role="status"></p>
-          <button id="authModeToggle" class="text-button" type="button">Criar uma conta local</button>
-          <p class="auth-privacy"><span class="status-dot status-dot--green"></span> Seus dados não entram no código publicado.</p>
+          <button id="authModeToggle" class="text-button" type="button">Criar uma conta online</button>
+          <p class="auth-privacy"><span class="status-dot status-dot--green"></span> Seus dados ficam fora do código publicado.</p>
         </div>
       </section>
     </main>
@@ -79,7 +79,7 @@
           <button class="nav-item" data-view-target="configuracoes"><span class="nav-icon">⚙</span><span>Configurações</span></button>
           <div class="sidebar-user">
             <span class="avatar" id="sidebarAvatar">M</span>
-            <div><strong id="sidebarUserName">Usuário</strong><small id="sidebarUserMode">local protegido</small></div>
+            <div><strong id="sidebarUserName">Usuário</strong><small id="sidebarUserMode">planilha sincronizada</small></div>
             <button id="logoutButton" class="icon-button" type="button" title="Sair" aria-label="Sair">↗</button>
           </div>
         </div>
@@ -99,9 +99,8 @@
           <section class="view is-active" data-view="dashboard">
             <div class="view-intro">
               <div><p class="eyebrow">RESUMO DO PERÍODO</p><h1 id="dashboardGreeting">Bom dia.</h1><p class="view-lede" id="dashboardLead">Veja o que aconteceu com o seu dinheiro e o que merece atenção.</p></div>
-              <div class="intro-actions"><button class="button button--secondary" data-action="load-sample" type="button">Ver exemplos</button><button class="button button--primary" data-action="open-transaction"><span>+</span> Lançar movimento</button></div>
+              <div class="intro-actions"><button class="button button--primary" data-action="open-transaction"><span>+</span> Lançar movimento</button></div>
             </div>
-            <div id="demoBanner" class="demo-banner is-hidden"><span>i</span><div><strong>Você está vendo exemplos.</strong><p>São dados ilustrativos, não representam sua contabilidade. Remova-os quando quiser em Configurações.</p></div><button type="button" data-action="clear-sample" aria-label="Remover exemplos">×</button></div>
             <div id="dashboardMetrics" class="metric-grid"></div>
             <div class="dashboard-grid">
               <article class="panel panel--wide">
@@ -177,8 +176,8 @@
 
           <section class="view" data-view="configuracoes">
             <div class="view-intro"><div><p class="eyebrow">CONTROLE E PRIVACIDADE</p><h1>Configurações</h1><p class="view-lede">Escolha como guardar seus dados e mantenha uma cópia quando quiser.</p></div></div>
-            <div class="settings-grid"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PERFIL</p><h3>Seu cadastro</h3></div></div><form id="profileForm" class="stack-form"><label class="field"><span>Como quer ser chamado?</span><input name="displayName" id="profileDisplayName" required /></label><label class="field"><span>Moeda</span><select name="currency"><option value="BRL">Real brasileiro (R$)</option></select></label><button class="button button--secondary" type="submit">Salvar perfil</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">DADOS</p><h3>Importar e exportar</h3></div></div><p class="settings-copy">A exportação é um arquivo JSON legível. Guarde-o em local seguro: ele contém os seus lançamentos.</p><div class="settings-actions"><button class="button button--secondary" data-action="export-data" type="button">Baixar meus dados</button><label class="button button--ghost file-button">Importar JSON<input id="importDataInput" type="file" accept="application/json,.json" /></label></div><button class="danger-link" type="button" data-action="clear-all">Apagar todos os dados deste usuário</button></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ARMAZENAMENTO</p><h3 id="storageTitle">Local protegido</h3></div><span class="status-pill status-pill--green" id="storagePill">ATIVO</span></div><p id="storageDescription" class="settings-copy">Os dados são criptografados antes de serem guardados neste navegador. A senha não é armazenada.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span id="storageDetail">Nenhum dado é enviado para a internet neste modo.</span></div></article></div>
-            <article class="remote-info panel"><span class="note-mark">↗</span><div><h3>Armazenamento na planilha</h3><p>Quando o endpoint do Apps Script estiver publicado, o login local sincroniza seus dados com a planilha dentro da pasta do Drive. Cada gravação gera estado atual, histórico de recuperação e snapshot no Drive.</p></div></article>
+            <div class="settings-grid"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PERFIL</p><h3>Seu cadastro</h3></div></div><form id="profileForm" class="stack-form"><label class="field"><span>Como quer ser chamado?</span><input name="displayName" id="profileDisplayName" required /></label><label class="field"><span>Moeda</span><select name="currency"><option value="BRL">Real brasileiro (R$)</option></select></label><button class="button button--secondary" type="submit">Salvar perfil</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">BACKUP ONLINE</p><h3>Cópias automáticas</h3></div></div><p class="settings-copy">Cada gravação é mantida na planilha, no histórico de recuperação e em um novo snapshot na pasta do Drive.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span>Fonte oficial: planilha online.</span></div><button class="danger-link" type="button" data-action="clear-all">Apagar todos os dados deste usuário</button></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ARMAZENAMENTO</p><h3 id="storageTitle">Planilha sincronizada</h3></div><span class="status-pill status-pill--green" id="storagePill">ONLINE</span></div><p id="storageDescription" class="settings-copy">Os lançamentos são gravados online e recebem snapshots automáticos no Drive.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span id="storageDetail">A planilha online é a fonte oficial dos seus dados.</span></div></article></div>
+            <article class="remote-info panel"><span class="note-mark">↗</span><div><h3>Armazenamento online</h3><p>O aplicativo depende da planilha online. O Apps Script valida o usuário e a senha, grava cada alteração e mantém o histórico e os snapshots na pasta do Drive.</p></div></article>
           </section>
         </main>
       </section>

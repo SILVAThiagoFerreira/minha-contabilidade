@@ -1,41 +1,34 @@
 # Minha contabilidade
 
-Painel pessoal para organizar entradas, saídas, contas bancárias, custos fixos e aplicações em CDB. A interface foi inspirada na referência visual fornecida: grafite, vermelho de destaque, divisores finos e cartões operacionais, sem logo de terceiros.
+Painel online para organizar entradas, saídas, contas bancárias, custos fixos e aplicações em CDB. A interface usa grafite, vermelho de destaque, divisores finos e cartões operacionais, sem logo de terceiros.
 
-## O que já está disponível
+## Recursos
 
-- login e criação de conta local com senha;
-- dados separados por usuário no navegador;
-- cofre local criptografado com PBKDF2 + AES-GCM;
+- cadastro e login online com usuário e senha;
+- planilha Google como fonte oficial dos dados;
+- histórico append-only e snapshots automáticos na pasta do Google Drive;
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
 - lançamentos por conta e categoria;
 - contas correntes e poupanças por banco;
 - custos fixos ativos ou pausados;
 - módulo específico para CDB, com taxa, liquidez e vencimento;
 - análises mensais, categorias e taxa de sobra;
-- exportação e importação manual de backup JSON;
-- modo online com login local e Google Apps Script gravando na planilha dentro da pasta do Drive;
-- armazenamento resiliente com estado atual, journal append-only, checksum e snapshots;
 - workflow de GitHub Pages.
 
-## Segurança e limite do GitHub Pages
+## Arquitetura online
 
-GitHub Pages não é um servidor de aplicação nem um banco de dados. Por isso, o site publicado não carrega dados financeiros reais e não contém segredos. O login local e a sincronização online usam o backend documentado em [`docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md`](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). A pasta do Drive é usada pelo Apps Script como destino da planilha e dos snapshots.
+O GitHub Pages hospeda apenas a interface pública. O Apps Script é o backend e executa como o proprietário da pasta do Drive. O cadastro, o verificador da senha, os lançamentos e o histórico são gravados nas abas Users, VaultCurrent e VaultJournal. Cada sincronização também cria um snapshot independente na pasta do Drive.
 
-O backend armazena uma revisão corrente por usuário local, mantém um journal sem sobrescrita e cria snapshots JSON novos na pasta configurada. Isso reduz o risco de perda e permite recuperar a última revisão válida, mas uma segunda cópia independente continua recomendada para uma contabilidade importante.
+O navegador não usa localStorage, sessionStorage, IndexedDB, cache de cofre ou modo offline. A sessão e os dados ficam somente na memória enquanto a página está aberta; depois de sair ou recarregar, é necessário entrar novamente. Se a planilha estiver indisponível, o aplicativo falha fechado e não confirma a alteração.
+
+## Configuração
+
+Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da pasta e o ID da planilha ficam somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar.
+
+## CDB
 
 O módulo CDB trata projeções como estimativas. A projeção mensal só é calculada para uma taxa prefixada cadastrada e não substitui o extrato da instituição, impostos ou variações do CDI.
 
-## Rodar localmente
-
-Como o projeto é estático, qualquer servidor HTTP serve a pasta:
-
-```powershell
-python -m http.server 4173
-```
-
-Abra `http://localhost:4173/`. Abrir o arquivo diretamente com `file://` pode impedir a Web Crypto API em alguns navegadores.
-
 ## Publicação
 
-O workflow `.github/workflows/deploy-pages.yml` publica a raiz do repositório em cada push para `main`. O conteúdo de `VISUAL/` é ignorado para não publicar os PDFs e logos usados apenas como referência.
+O workflow .github/workflows/deploy-pages.yml publica a raiz do repositório a cada push para main. O conteúdo de VISUAL/ é ignorado para não publicar os materiais usados apenas como referência.

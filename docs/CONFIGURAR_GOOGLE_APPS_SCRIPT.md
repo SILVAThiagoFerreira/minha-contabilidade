@@ -1,96 +1,77 @@
-# Configurar o armazenamento na planilha e na pasta do Drive
+# Configurar o armazenamento online
 
-O GitHub Pages hospeda somente a interface. O Apps Script executa como o proprietário da pasta, grava a contabilidade na planilha e cria snapshots JSON na mesma pasta.
+O GitHub Pages hospeda somente a interface. O Apps Script executa como o proprietário da pasta, valida o cadastro e a senha, grava a contabilidade na planilha e cria snapshots na mesma pasta do Drive.
 
-O aplicativo usa apenas o usuário e a senha locais da tela de entrada. Não há login Google, client ID ou validação de conta Google no frontend ou no backend.
+Não existe modo local. O navegador não guarda contas, credenciais ou cofre em localStorage, sessionStorage, IndexedDB ou arquivos automáticos. A sessão fica apenas na memória enquanto a página está aberta.
 
 ## 1. Configurar a pasta e a planilha
 
 Na conta proprietária do Drive:
 
 1. Use a pasta escolhida para o projeto.
-2. Deixe o acesso da pasta como **Restrito**.
-3. Se já existir uma planilha para o banco, informe seu ID na propriedade `SPREADSHEET_ID`.
-4. Se `SPREADSHEET_ID` ficar vazio, o script cria automaticamente **Minha Contabilidade - Banco** dentro da pasta.
+2. Mantenha o acesso da pasta como Restrito.
+3. Informe o ID da planilha na propriedade SPREADSHEET_ID.
+4. Informe o ID da pasta na propriedade DRIVE_FOLDER_ID.
 
-O ID da pasta não fica no frontend, no `config.js` ou no artefato publicado do Pages. Ele fica somente nas propriedades privadas do Apps Script.
+O ID da pasta e o ID da planilha não ficam no frontend ou no artefato publicado do Pages. Eles ficam somente nas propriedades privadas do Apps Script.
 
-## 2. Publicar o backend
+## 2. Publicar o Apps Script
 
-1. Abra [script.google.com](https://script.google.com/) com a conta proprietária da pasta.
-2. Crie ou abra o projeto **Minha Contabilidade - Backend**.
-3. Copie o conteúdo de [`backend/Code.gs`](../backend/Code.gs).
-4. Em **Configurações do projeto → Propriedades do script**, configure:
+1. Abra script.google.com com a conta proprietária da pasta.
+2. Abra o projeto Minha Contabilidade - Backend.
+3. Copie o conteúdo de backend/Code.gs para o editor do Apps Script.
+4. Em Configurações do projeto, abra Propriedades do script e configure:
 
 | Propriedade | Valor |
-|---|---|
-| `DRIVE_FOLDER_ID` | ID da pasta escolhida no Google Drive |
-| `SPREADSHEET_ID` | Opcional; ID da planilha existente |
-| `SPREADSHEET_NAME` | Opcional; padrão `Minha Contabilidade - Banco` |
+| --- | --- |
+| DRIVE_FOLDER_ID | ID da pasta escolhida no Google Drive |
+| SPREADSHEET_ID | ID da planilha usada como banco |
+| SPREADSHEET_NAME | Opcional; padrão Minha Contabilidade - Banco |
 
-Em **Implantar → Nova implantação → Aplicativo da Web**:
+Em Implantar, crie uma implantação como Aplicativo da Web:
 
-- executar como: **eu / proprietário da pasta**;
-- quem tem acesso: **qualquer pessoa**;
-- copie a URL que termina em `/exec`.
+- executar como: eu / proprietário da pasta;
+- quem tem acesso: qualquer pessoa;
+- copie a URL que termina em /exec.
 
-Na primeira autorização do Apps Script, o proprietário precisa permitir o acesso do script ao Drive e ao Sheets. Isso é a autorização do próprio backend para gravar os arquivos; não é login Google no aplicativo.
+Na primeira execução, o proprietário precisa autorizar o acesso do script ao Drive e ao Sheets. Essa autorização permite que o backend grave na pasta; não é uma tela de login do aplicativo.
 
 ## 3. Ligar o frontend
 
-Edite `config.js` com a URL `/exec`:
+No arquivo config.js, informe a URL /exec na propriedade apiUrl. O arquivo já deve conter a URL da implantação ativa.
 
-```js
-window.FINANCE_CONFIG = Object.freeze({
-  apiUrl: "https://script.google.com/macros/s/SEU_DEPLOYMENT_ID/exec"
-});
-```
+Depois, publique a alteração no GitHub Pages. O usuário cria a conta ou entra com usuário e senha; o Apps Script valida a credencial e devolve o cofre correspondente.
 
-Depois, publique a alteração no GitHub Pages. O login continua sendo feito com usuário e senha locais. Ao entrar ou criar uma conta, o aplicativo consulta a planilha; as alterações seguintes são sincronizadas automaticamente.
+Se apiUrl estiver ausente, a tela bloqueia o uso e informa que o armazenamento online não foi configurado. O sistema nunca abre um modo alternativo local.
 
-Se `apiUrl` ficar vazio, o sistema continua funcionando no modo local, mas os dados ficam somente no navegador.
+## 4. Abas e autenticação
 
-## 4. Como os dados são separados
+O backend cria ou valida as seguintes abas:
 
-O frontend calcula um identificador estável a partir do nome de usuário local. O Apps Script usa esse identificador para encontrar a linha correta; a senha não é enviada nem armazenada na planilha.
+- Users: accountId, username, displayName, salt, verifier, datas e status;
+- VaultCurrent: uma revisão corrente por usuário;
+- VaultJournal: histórico append-only de cada sincronização.
 
-As chamadas usam este contrato:
+O frontend calcula o identificador do usuário para localizar o cadastro, mas o backend confirma o mesmo hash, procura o usuário na aba Users e verifica a senha com salt. O backend não aceita get ou sync sem uma senha válida. A senha é enviada apenas pela conexão HTTPS do Web App e nunca é gravada em texto puro; a planilha guarda apenas o salt e o verificador.
 
-```json
-{
-  "action": "get",
-  "accountId": "hash-do-usuario",
-  "username": "thiago"
-}
-```
-
-```json
-{
-  "action": "sync",
-  "accountId": "hash-do-usuario",
-  "username": "thiago",
-  "payload": {},
-  "baseRevision": 3
-}
-```
-
-O backend valida o formato do identificador e do usuário antes de acessar a planilha. O isolamento entre usuários é uma convenção do login local; o endpoint não usa OAuth.
+O payload de cada usuário fica em uma célula JSON com limite operacional de 45.000 caracteres. O backend valida as coleções antes de gravar e usa checksum SHA-256 para detectar corrupção.
 
 ## 5. Recuperação e cópias
 
 Cada sincronização é gravada nesta ordem:
 
-1. `VaultJournal`: adiciona uma nova linha sem apagar revisões anteriores;
-2. `VaultCurrent`: atualiza o estado corrente daquele usuário;
-3. pasta do Drive: cria um snapshot JSON novo, sem sobrescrever o anterior.
+1. VaultJournal recebe uma nova linha sem apagar revisões anteriores;
+2. VaultCurrent recebe o estado corrente;
+3. a pasta do Drive recebe um snapshot JSON novo, sem sobrescrever o anterior.
 
-O backend usa `LockService`, calcula SHA-256 do payload e verifica o checksum ao ler. Se o estado corrente estiver corrompido, a última revisão válida do journal é devolvida. O controle de `baseRevision` evita que uma aba antiga sobrescreva uma alteração mais nova por acidente.
+O backend usa LockService, controla a revisão base e rejeita uma gravação feita sobre uma versão antiga. Se o estado corrente estiver inválido, a última revisão válida do journal é promovida novamente para VaultCurrent antes de continuar.
 
-Os snapshots não são apagados automaticamente. O aplicativo também mantém exportação manual em JSON na tela de configurações.
+Os snapshots não são apagados automaticamente. Eles são a camada de recuperação online do sistema.
 
-## 6. Observações práticas
+## 6. Operação
 
-- O JSON armazenado pelo Apps Script fica legível para o proprietário da planilha.
-- A URL do endpoint precisa estar no `config.js` para o site sincronizar.
+- Depois de sair ou recarregar a página, faça login novamente.
+- Uma conta criada em um dispositivo pode ser usada em outro porque o cadastro está na planilha.
+- Em falha de rede ou indisponibilidade do Apps Script, a alteração não é apresentada como salva.
 - Não coloque o ID da pasta, a URL da planilha ou dados financeiros no repositório.
-- Se a planilha antiga tiver dados criados pelo fluxo Google anterior, exporte esses dados e importe-os na conta local desejada; os identificadores antigos não são os mesmos do login local.
+- O JSON da contabilidade é legível para o proprietário da planilha e da pasta; mantenha as permissões do Drive restritas.
