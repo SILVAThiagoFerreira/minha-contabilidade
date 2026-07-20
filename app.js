@@ -90,6 +90,7 @@
       transactions: [],
       fixedCosts: [],
       cdbs: [],
+      savings: [],
       updatedAt: new Date().toISOString()
     };
   }
@@ -101,6 +102,7 @@
     normalized.transactions = Array.isArray(value?.transactions) ? value.transactions : [];
     normalized.fixedCosts = Array.isArray(value?.fixedCosts) ? value.fixedCosts : [];
     normalized.cdbs = Array.isArray(value?.cdbs) ? value.cdbs : [];
+    normalized.savings = Array.isArray(value?.savings) ? value.savings : [];
     return normalized;
   }
 
@@ -228,9 +230,13 @@
 
   function refreshFormSelects() {
     const accounts = vault.accounts.map((account) => ({ value: account.id, label: account.name }));
+    const linkedAccounts = vault.accounts.map((account) => ({ value: account.id, label: `${account.name} · ${account.type === "poupanca" ? "Poupança" : "Conta corrente"}` }));
+    const savingsAccounts = vault.accounts.filter((account) => account.type === "poupanca").map((account) => ({ value: account.id, label: `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` }));
     populateSelect($("#transactionCategory"), CATEGORIES.map((category) => ({ value: category, label: category })), $("#transactionCategory")?.value || "Alimentação");
     populateSelect($("#transactionAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transactionAccount")?.value || "");
     populateSelect($("#fixedAccount"), [{ value: "", label: "Sem conta definida" }, ...accounts], $("#fixedAccount")?.value || "");
+    populateSelect($("#cdbAccount"), linkedAccounts.length ? linkedAccounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#cdbAccount")?.value || "");
+    populateSelect($("#savingsAccount"), savingsAccounts.length ? savingsAccounts : [{ value: "", label: "Cadastre uma conta do tipo poupança" }], $("#savingsAccount")?.value || "");
   }
 
   function transactionsForPeriod(period = currentPeriod()) {
@@ -249,6 +255,34 @@
 
   function totalBalance() {
     return vault.accounts.reduce((sum, account) => sum + accountBalance(account.id), 0);
+  }
+
+  function accountById(accountId) {
+    return vault.accounts.find((account) => account.id === accountId);
+  }
+
+  function savingsConfig(accountId) {
+    return vault.savings.find((item) => item.accountId === accountId);
+  }
+
+  function elapsedMonths(referenceDate) {
+    const reference = new Date(`${referenceDate}T12:00:00`);
+    const now = new Date();
+    if (Number.isNaN(reference.getTime())) return 0;
+    let months = (now.getFullYear() - reference.getFullYear()) * 12 + now.getMonth() - reference.getMonth();
+    if (now.getDate() < reference.getDate()) months -= 1;
+    return Math.max(0, months);
+  }
+
+  function savingsSummary(account) {
+    const config = savingsConfig(account.id);
+    const baseBalance = accountBalance(account.id);
+    const monthlyRate = toAmount(config?.monthlyRate ?? 0.5);
+    const referenceDate = config?.referenceDate || account.createdAt || todayIso();
+    const automaticYield = baseBalance * (Math.pow(1 + monthlyRate / 100, elapsedMonths(referenceDate)) - 1);
+    const hasManualCorrection = config?.manualYield !== null && config?.manualYield !== undefined && String(config.manualYield).trim() !== "";
+    const yieldValue = hasManualCorrection ? toAmount(config.manualYield) : automaticYield;
+    return { config, baseBalance, monthlyRate, referenceDate, automaticYield, yieldValue, hasManualCorrection, projectedBalance: baseBalance + yieldValue };
   }
 
   function metricCard(label, value, meta, className = "") {
@@ -324,6 +358,40 @@
     const cdb = vault.cdbs.reduce((sum, item) => sum + toAmount(item.principal), 0);
     $("#accountMetrics").innerHTML = [metricCard("SALDO EM CONTAS", formatShortCurrency(balance), "saldo calculado", "metric-card--accent"), metricCard("ENTRADAS DO MÊS", formatShortCurrency(current), "movimentos positivos", "metric-card--positive"), metricCard("SEPARADO EM CDB", formatShortCurrency(cdb), `${vault.cdbs.length} posição(ões)`, "")].join("");
     $("#accountList").innerHTML = vault.accounts.length ? vault.accounts.map((account) => `<div class="account-row"><div class="account-row-main"><span class="account-mark">${escapeHtml(account.name.slice(0, 2).toUpperCase())}</span><div><strong>${escapeHtml(account.name)}</strong><small>${account.type === "poupanca" ? "Poupança" : "Conta corrente"}${account.nickname ? ` · ${escapeHtml(account.nickname)}` : ""}</small></div></div><strong class="row-value">${formatCurrency(accountBalance(account.id))}</strong><span class="table-actions"><button class="table-action" type="button" data-action="delete-account" data-id="${account.id}" title="Excluir conta">×</button></span></div>`).join("") : `<div class="empty-state"><strong>Nenhuma conta cadastrada.</strong><span>Cadastre seu primeiro banco para acompanhar os saldos.</span></div>`;
+    renderSavingsManagement();
+  }
+
+  function fillSavingsForm() {
+    const form = $("#savingsForm");
+    const select = $("#savingsAccount");
+    if (!form || !select) return;
+    const account = accountById(select.value) || vault.accounts.find((item) => item.type === "poupanca");
+    const fields = {
+      monthlyRate: $("input[name='monthlyRate']", form),
+      referenceDate: $("input[name='referenceDate']", form),
+      manualYield: $("input[name='manualYield']", form),
+      correctionNote: $("input[name='correctionNote']", form)
+    };
+    if (!account) {
+      Object.values(fields).forEach((field) => { if (field) field.value = ""; });
+      return;
+    }
+    select.value = account.id;
+    const summary = savingsSummary(account);
+    fields.monthlyRate.value = summary.config ? summary.monthlyRate : "0.50";
+    fields.referenceDate.value = summary.referenceDate;
+    fields.manualYield.value = summary.hasManualCorrection ? summary.config.manualYield : "";
+    fields.correctionNote.value = summary.config?.correctionNote || "";
+  }
+
+  function renderSavingsManagement() {
+    const savingsAccounts = vault.accounts.filter((account) => account.type === "poupanca");
+    $("#savingsSummary").innerHTML = savingsAccounts.length ? savingsAccounts.map((account) => {
+      const summary = savingsSummary(account);
+      const mode = summary.hasManualCorrection ? "correção manual" : `${summary.monthlyRate.toFixed(2).replace(".", ",")}% a.m. estimativa`;
+      return `<div class="savings-row"><div class="account-row-main"><span class="account-mark">${escapeHtml(account.name.slice(0, 2).toUpperCase())}</span><div><strong>${escapeHtml(account.name)}</strong><small>${mode} · base em ${formatDate(summary.referenceDate)}</small></div></div><div class="savings-row-values"><span><small>Rendimento</small><strong>${formatCurrency(summary.yieldValue)}</strong></span><span><small>Saldo projetado</small><strong>${formatCurrency(summary.projectedBalance)}</strong></span></div></div>`;
+    }).join("") : `<div class="empty-state"><strong>Nenhuma poupança cadastrada.</strong><span>Cadastre uma conta com o tipo Poupança para começar a acompanhar o rendimento.</span></div>`;
+    fillSavingsForm();
   }
 
   function renderFixedCosts() {
@@ -344,7 +412,7 @@
     const monthlyProjection = prefixPositions.reduce((sum, item) => sum + (toAmount(item.principal) * (toAmount(item.rate) / 100) / 12), 0);
     const nextMaturity = positions.filter((item) => item.maturityAt).sort((a, b) => String(a.maturityAt).localeCompare(String(b.maturityAt)))[0]?.maturityAt;
     $("#cdbMetrics").innerHTML = [metricCard("TOTAL APLICADO", formatShortCurrency(principal), `${positions.length} posição(ões)`, "metric-card--accent"), metricCard("PROJEÇÃO MENSAL", prefixPositions.length ? formatShortCurrency(monthlyProjection) : "—", prefixPositions.length ? "estimativa bruta prefixada" : "informe uma taxa prefixada", "metric-card--positive"), metricCard("PRÓXIMO VENCIMENTO", nextMaturity ? formatDate(nextMaturity) : "—", nextMaturity ? "conforme cadastro" : "nenhum vencimento informado", "")].join("");
-    $("#cdbTable").innerHTML = positions.length ? `<table class="data-table"><thead><tr><th>POSIÇÃO</th><th>INSTITUIÇÃO</th><th>APLICADO</th><th>TAXA</th><th>LIQUIDEZ</th><th>VENCIMENTO</th><th></th></tr></thead><tbody>${positions.map((item) => `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.bank)}</td><td class="number">${formatCurrency(item.principal)}</td><td>${escapeHtml(item.rate)}${item.rateType === "CDI" ? "% CDI" : "% a.a."}</td><td>${escapeHtml(item.liquidity)}</td><td>${formatDate(item.maturityAt)}</td><td><span class="table-actions"><button class="table-action" type="button" data-action="delete-cdb" data-id="${item.id}" title="Excluir">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum CDB cadastrado.</strong><span>Separe suas aplicações do saldo das contas e acompanhe o vencimento.</span></div>`;
+    $("#cdbTable").innerHTML = positions.length ? `<table class="data-table"><thead><tr><th>POSIÇÃO</th><th>CONTA / BANCO</th><th>APLICADO</th><th>TAXA</th><th>LIQUIDEZ</th><th>VENCIMENTO</th><th></th></tr></thead><tbody>${positions.map((item) => { const account = accountById(item.accountId); const institution = account ? `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` : item.bank || "—"; return `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(institution)}</td><td class="number">${formatCurrency(item.principal)}</td><td>${escapeHtml(item.rate)}${item.rateType === "CDI" ? "% CDI" : "% a.a."}</td><td>${escapeHtml(item.liquidity)}</td><td>${formatDate(item.maturityAt)}</td><td><span class="table-actions"><button class="table-action" type="button" data-action="delete-cdb" data-id="${item.id}" title="Excluir">×</button></span></td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum CDB cadastrado.</strong><span>Separe suas aplicações do saldo das contas e acompanhe o vencimento.</span></div>`;
   }
 
   function getMonthlySummary(count = 6) {
@@ -484,7 +552,7 @@
     event.preventDefault();
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
-    vault.accounts.push({ id: uid("account"), name: data.name.trim(), type: data.type, balance: toAmount(data.balance), nickname: data.nickname?.trim() || "" });
+    vault.accounts.push({ id: uid("account"), name: data.name.trim(), type: data.type, balance: toAmount(data.balance), nickname: data.nickname?.trim() || "", createdAt: todayIso() });
     await saveCurrentVault();
     clearForm(form);
     renderAll();
@@ -506,11 +574,33 @@
     event.preventDefault();
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
-    vault.cdbs.push({ id: uid("cdb"), name: data.name.trim(), bank: data.bank.trim(), principal: toAmount(data.principal), rate: toAmount(data.rate), rateType: data.rateType, startedAt: data.startedAt, maturityAt: data.maturityAt || "", liquidity: data.liquidity });
+    const account = accountById(data.accountId);
+    if (!account) { showToast("Cadastre e selecione a conta que guarda este CDB.", "error"); setView("contas"); return; }
+    vault.cdbs.push({ id: uid("cdb"), name: data.name.trim(), accountId: account.id, bank: account.name, principal: toAmount(data.principal), rate: toAmount(data.rate), rateType: data.rateType, startedAt: data.startedAt, maturityAt: data.maturityAt || "", liquidity: data.liquidity });
     await saveCurrentVault();
     clearForm(form);
     renderAll();
     showToast("CDB cadastrado.");
+  }
+
+  async function handleSavingsSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const account = accountById(data.accountId);
+    if (!account || account.type !== "poupanca") { showToast("Selecione uma conta do tipo poupança.", "error"); return; }
+    const existing = savingsConfig(account.id);
+    const rawManualYield = String(data.manualYield || "").trim();
+    const rawMonthlyRate = String(data.monthlyRate || "").trim();
+    const monthlyRate = rawMonthlyRate ? toAmount(rawMonthlyRate) : 0.5;
+    if (monthlyRate < 0 || (rawManualYield && toAmount(rawManualYield) < 0)) { showToast("Taxa e rendimento corrigido não podem ser negativos.", "error"); return; }
+    const record = { id: existing?.id || uid("savings"), accountId: account.id, monthlyRate, referenceDate: data.referenceDate || todayIso(), manualYield: rawManualYield ? toAmount(rawManualYield) : null, correctionNote: data.correctionNote?.trim() || "", updatedAt: new Date().toISOString() };
+    const index = vault.savings.findIndex((item) => item.accountId === account.id);
+    if (index >= 0) vault.savings[index] = record;
+    else vault.savings.push(record);
+    await saveCurrentVault();
+    renderAll();
+    showToast(rawManualYield ? "Correção da poupança salva." : "Rendimento estimado da poupança atualizado.");
   }
 
   async function handleProfileSubmit(event) {
@@ -524,11 +614,24 @@
   }
 
   async function clearAllData() {
-    if (!window.confirm("Apagar todos os lançamentos, contas, custos fixos e CDBs deste usuário? Essa ação não pode ser desfeita.")) return;
+    if (!window.confirm("Apagar todos os lançamentos, contas, custos fixos, CDBs e configurações de poupança deste usuário? Essa ação não pode ser desfeita.")) return;
     vault = blankVault(vault.profile.displayName);
     await saveCurrentVault();
     renderAll();
     showToast("Dados deste usuário apagados.");
+  }
+
+  async function deleteAccount(accountId) {
+    const account = accountById(accountId);
+    if (!account) return;
+    const references = [
+      vault.transactions.some((item) => item.accountId === accountId),
+      vault.fixedCosts.some((item) => item.accountId === accountId),
+      vault.cdbs.some((item) => item.accountId === accountId),
+      vault.savings.some((item) => item.accountId === accountId)
+    ];
+    if (references.some(Boolean)) { showToast("Não exclua uma conta que ainda está vinculada a lançamentos, custos, CDB ou poupança.", "error"); return; }
+    await deleteById("accounts", accountId, `Excluir a conta ${account.name}?`);
   }
 
   function bindEvents() {
@@ -542,6 +645,8 @@
     $("#accountForm").addEventListener("submit", handleAccountSubmit);
     $("#fixedCostForm").addEventListener("submit", handleFixedSubmit);
     $("#cdbForm").addEventListener("submit", handleCdbSubmit);
+    $("#savingsForm").addEventListener("submit", handleSavingsSubmit);
+    $("#savingsAccount").addEventListener("change", fillSavingsForm);
     $("#profileForm").addEventListener("submit", handleProfileSubmit);
     document.addEventListener("click", async (event) => {
       const target = event.target.closest("[data-view-target], [data-view-link], [data-action]");
@@ -552,7 +657,7 @@
       if (action === "clear-all") await clearAllData();
       if (action === "delete-transaction") await deleteById("transactions", target.dataset.id, "Excluir este lançamento?");
       if (action === "edit-transaction") editTransaction(target.dataset.id);
-      if (action === "delete-account") await deleteById("accounts", target.dataset.id, "Excluir esta conta? Os lançamentos históricos continuarão registrados.");
+      if (action === "delete-account") await deleteAccount(target.dataset.id);
       if (action === "delete-fixed") await deleteById("fixedCosts", target.dataset.id, "Excluir este custo fixo?");
       if (action === "delete-cdb") await deleteById("cdbs", target.dataset.id, "Excluir esta posição de CDB?");
       if (action === "toggle-fixed") { const item = vault.fixedCosts.find((fixed) => fixed.id === target.dataset.id); if (item) { item.active = item.active === false; await saveCurrentVault(); renderAll(); showToast(item.active ? "Custo fixo ativado." : "Custo fixo pausado."); } }

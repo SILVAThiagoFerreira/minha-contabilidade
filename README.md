@@ -10,6 +10,8 @@ Painel online para organizar entradas, saídas, contas bancárias, custos fixos 
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
 - lançamentos por conta e categoria;
 - contas correntes e poupanças por banco;
+- CDBs vinculados diretamente a uma conta já cadastrada;
+- gerenciamento de poupança com estimativa mensal e correção manual pelo extrato;
 - custos fixos ativos ou pausados;
 - módulo específico para CDB, com taxa, liquidez e vencimento;
 - análises mensais, categorias e taxa de sobra;
@@ -28,6 +30,12 @@ Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCR
 ## CDB
 
 O módulo CDB trata projeções como estimativas. A projeção mensal só é calculada para uma taxa prefixada cadastrada e não substitui o extrato da instituição, impostos ou variações do CDI.
+
+Ao cadastrar um CDB, a instituição é escolhida entre as contas existentes. CDBs antigos que ainda tenham apenas o texto do banco continuam sendo exibidos normalmente.
+
+## Poupança
+
+Contas cadastradas como poupança aparecem em “Contas > Gerenciar rendimento”. O sistema calcula uma projeção com a taxa mensal informada (0,50% ao mês como referência inicial) e a data-base. O campo “Rendimento corrigido” permite substituir a estimativa pelo valor conferido no extrato, sem apagar o saldo da conta.
 
 ## Publicação
 
