@@ -1,10 +1,8 @@
 # Ativar login Google e armazenamento no Drive
 
-O GitHub Pages continua hospedando somente a interface. Os dados financeiros ficam no Google Apps Script, em uma planilha criada dentro da pasta do Drive informada para o projeto:
+O GitHub Pages continua hospedando somente a interface. Os dados financeiros ficam no Google Apps Script, em uma planilha criada dentro da pasta privada configurada nas propriedades do projeto.
 
-`https://drive.google.com/drive/folders/1ceGgC-XicdMzxX9-__6oBKhHtkahoUk1`
-
-O endereço da pasta não é uma credencial. O que protege os dados é a combinação de Google Login, Apps Script executando como o proprietário e uma pasta com acesso restrito.
+O ID da pasta não fica no frontend, no `config.js` ou no artefato publicado do Pages. O que controla o acesso é o backend executando como o proprietário e usando a propriedade privada `DRIVE_FOLDER_ID`.
 
 ## 1. Confirme a privacidade da pasta
 
@@ -20,7 +18,7 @@ O filtro feito pelo aplicativo impede que uma conta Google leia a linha de outra
 
 | Propriedade | Valor |
 |---|---|
-| `DRIVE_FOLDER_ID` | `1ceGgC-XicdMzxX9-__6oBKhHtkahoUk1` |
+| `DRIVE_FOLDER_ID` | ID da pasta privada escolhida no Google Drive |
 | `GOOGLE_CLIENT_ID` | client ID OAuth da aplicação Web |
 | `ALLOWED_EMAILS` | opcional; e-mails separados por vírgula |
 

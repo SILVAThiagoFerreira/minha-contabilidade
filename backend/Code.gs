@@ -14,7 +14,8 @@
  * dados financeiros.
  */
 const DEFAULT_CONFIG = {
-  driveFolderId: "1ceGgC-XicdMzxX9-__6oBKhHtkahoUk1",
+  // Defina DRIVE_FOLDER_ID nas propriedades privadas do Apps Script.
+  driveFolderId: "",
   spreadsheetId: "",
   spreadsheetName: "Minha Contabilidade - Banco",
   googleClientId: "",
