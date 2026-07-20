@@ -2,13 +2,11 @@
  * Backend online de Minha Contabilidade.
  *
  * O Web App executa como o proprietário e nunca entrega a planilha ao
- * navegador. O cadastro, a senha e o cofre persistem somente no Google Sheets
- * e os snapshots são criados na pasta privada do Drive.
+ * navegador. O cadastro, a senha, o cofre e o histórico persistem somente
+ * no Google Sheets.
  */
 const DEFAULT_CONFIG = {
-  driveFolderId: "",
-  spreadsheetId: "",
-  spreadsheetName: "Minha Contabilidade - Banco"
+  spreadsheetId: ""
 };
 
 const USER_HEADERS = ["accountId", "username", "displayName", "salt", "verifier", "createdAt", "updatedAt", "status"];
@@ -20,7 +18,7 @@ const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
 
 function doGet() {
-  return json_({ ok: true, service: "minha-contabilidade", storage: "Users + VaultCurrent + VaultJournal + Drive snapshots" });
+  return json_({ ok: true, service: "minha-contabilidade", storage: "Google Sheets: Users + VaultCurrent + VaultJournal" });
 }
 
 function doPost(event) {
@@ -46,9 +44,7 @@ function json_(payload, statusCode) {
 function config_() {
   const properties = PropertiesService.getScriptProperties();
   return {
-    driveFolderId: properties.getProperty("DRIVE_FOLDER_ID") || DEFAULT_CONFIG.driveFolderId,
-    spreadsheetId: properties.getProperty("SPREADSHEET_ID") || DEFAULT_CONFIG.spreadsheetId,
-    spreadsheetName: properties.getProperty("SPREADSHEET_NAME") || DEFAULT_CONFIG.spreadsheetName
+    spreadsheetId: properties.getProperty("SPREADSHEET_ID") || DEFAULT_CONFIG.spreadsheetId
   };
 }
 
@@ -71,22 +67,10 @@ function displayName_(value, fallback) {
   return displayName || fallback;
 }
 
-function folder_() {
-  const id = config_().driveFolderId;
-  if (!id) throw new Error("DRIVE_FOLDER_ID não configurado.");
-  return DriveApp.getFolderById(id);
-}
-
 function spreadsheet_() {
   const config = config_();
-  if (config.spreadsheetId) return SpreadsheetApp.openById(config.spreadsheetId);
-  const folder = folder_();
-  const files = folder.getFilesByName(config.spreadsheetName);
-  if (files.hasNext()) return SpreadsheetApp.openById(files.next().getId());
-  const spreadsheet = SpreadsheetApp.create(config.spreadsheetName);
-  const file = DriveApp.getFileById(spreadsheet.getId());
-  file.moveTo(folder);
-  return spreadsheet;
+  if (!config.spreadsheetId) throw new Error("SPREADSHEET_ID não configurado. O sistema não criará outra planilha.");
+  return SpreadsheetApp.openById(config.spreadsheetId);
 }
 
 function sheetWithHeaders_(name, headers) {
@@ -277,23 +261,6 @@ function getVault_(identity) {
   }
 }
 
-function backupName_(identity, revision) {
-  return "backup-" + checksum_(identity.accountId).slice(0, 16) + "-r" + revision + "-" + Utilities.formatDate(new Date(), "UTC", "yyyyMMdd-HHmmss") + ".json";
-}
-
-function writeDriveSnapshot_(identity, revision, updatedAt, checksum, payload) {
-  const content = JSON.stringify({
-    service: "minha-contabilidade",
-    accountHash: checksum_(identity.accountId),
-    revision,
-    updatedAt,
-    checksum,
-    payload
-  }, null, 2);
-  folder_().createFile(backupName_(identity, revision), content, MimeType.PLAIN_TEXT);
-  return true;
-}
-
 function saveVault_(identity, payload, baseRevision) {
   const payloadText = jsonPayload_(payload);
   const checksum = checksum_(payloadText);
@@ -314,14 +281,7 @@ function saveVault_(identity, payload, baseRevision) {
     const values = [[identity.accountId, identity.username, revision, updatedAt, checksum, payloadText]];
     if (currentIndex < 0) sheet.getRange(sheet.getLastRow() + 1, 1, 1, CURRENT_HEADERS.length).setValues(values);
     else sheet.getRange(currentIndex + 2, 1, 1, CURRENT_HEADERS.length).setValues(values);
-    let backupCreated = false;
-    let backupWarning = "";
-    try {
-      backupCreated = writeDriveSnapshot_(identity, revision, updatedAt, checksum, payload);
-    } catch (error) {
-      backupWarning = "O snapshot do Drive não foi criado nesta tentativa.";
-    }
-    return { ok: true, username: identity.username, revision, updatedAt, checksum, backupCreated, backupWarning };
+    return { ok: true, username: identity.username, revision, updatedAt, checksum };
   } finally {
     lock.releaseLock();
   }

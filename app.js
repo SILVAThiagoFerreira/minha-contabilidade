@@ -145,7 +145,6 @@
     saveQueue = saveQueue.catch(() => {}).then(async () => {
       const result = await remoteRequest("sync", session, vault, session.revision || 0);
       session.revision = Number(result.revision || session.revision || 0);
-      if (result.backupWarning) showToast(result.backupWarning, "error");
     }).catch((error) => { showToast(error.message, "error"); throw error; });
     return saveQueue;
   }
@@ -451,7 +450,7 @@
     $("#profileDisplayName").value = vault.profile.displayName || "";
     $("#storageTitle").textContent = "Planilha sincronizada";
     $("#storagePill").textContent = "ONLINE";
-    $("#storageDescription").textContent = "Os lançamentos são gravados na planilha e recebem snapshots automáticos na pasta do Drive.";
+    $("#storageDescription").textContent = "Os lançamentos são gravados na planilha e recebem uma revisão permanente no histórico online.";
     $("#storageDetail").textContent = "A planilha online é a fonte oficial dos seus dados.";
   }
 

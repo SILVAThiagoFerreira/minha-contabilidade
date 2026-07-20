@@ -6,7 +6,7 @@ Painel online para organizar entradas, saídas, contas bancárias, custos fixos 
 
 - cadastro e login online com usuário e senha;
 - planilha Google como fonte oficial dos dados;
-- histórico append-only e snapshots automáticos na pasta do Google Drive;
+- histórico append-only na própria planilha, com revisões anteriores preservadas;
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
 - lançamentos por conta e categoria;
 - contas correntes e poupanças por banco;
@@ -19,13 +19,13 @@ Painel online para organizar entradas, saídas, contas bancárias, custos fixos 
 
 ## Arquitetura online
 
-O GitHub Pages hospeda apenas a interface pública. O Apps Script é o backend e executa como o proprietário da pasta do Drive. O cadastro, o verificador da senha, os lançamentos e o histórico são gravados nas abas Users, VaultCurrent e VaultJournal. Cada sincronização também cria um snapshot independente na pasta do Drive.
+O GitHub Pages hospeda apenas a interface pública. O Apps Script é o backend e grava tudo em uma única planilha online, nas abas Users, VaultCurrent e VaultJournal. O histórico append-only preserva as revisões anteriores sem criar arquivos auxiliares no Drive.
 
 O navegador não usa localStorage, sessionStorage, IndexedDB, cache de cofre ou modo offline. A sessão e os dados ficam somente na memória enquanto a página está aberta; depois de sair ou recarregar, é necessário entrar novamente. Se a planilha estiver indisponível, o aplicativo falha fechado e não confirma a alteração.
 
 ## Configuração
 
-Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da pasta e o ID da planilha ficam somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar.
+Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar.
 
 ## CDB
 
@@ -39,4 +39,4 @@ Contas cadastradas como poupança aparecem em “Contas > Gerenciar rendimento�
 
 ## Publicação
 
-O workflow .github/workflows/deploy-pages.yml publica a raiz do repositório a cada push para main. O conteúdo de VISUAL/ é ignorado para não publicar os materiais usados apenas como referência.
+O workflow .github/workflows/deploy-pages.yml publica somente os quatro arquivos estáticos da interface a cada push para main. Backend, documentação e materiais de referência não fazem parte do artefato servido.

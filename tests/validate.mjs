@@ -20,13 +20,15 @@ for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "fixos
 for (const marker of ["cdbAccount", "savingsForm", "savingsAccount", "savingsSummary", "manualYield", "monthlyRate"]) assert.match(html, new RegExp(marker), `campo ausente: ${marker}`);
 for (const marker of ["saveCurrentVault", "renderAnalyses", "remoteAccountId", "AbortController", "baseRevision", "openRemoteAccount", "register", "login", "savings", "accountId", "handleSavingsSubmit", "monthlyRate", "manualYield", "deleteAccount", "conta que ainda está vinculada"]) assert.match(js, new RegExp(marker), `regra ausente: ${marker}`);
 assert.match(workflow, /actions\/deploy-pages@v4/);
-for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "passwordVerifier_", "DRIVE_FOLDER_ID", "accountId", "VaultJournal", "LockService", "checksum_", "createFile", "savings"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
+for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "passwordVerifier_", "SPREADSHEET_ID", "accountId", "VaultJournal", "LockService", "checksum_", "savings"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
 assert.match(config, /apiUrl:\s*[""][^""]+[""]/i, "o endpoint online precisa estar configurado");
 assert.doesNotMatch(js, /localStorage|sessionStorage|indexedDB|caches\.|CacheStorage|serviceWorker/i, "o frontend não deve persistir dados no navegador");
 assert.doesNotMatch(js, /fallbackVault|mode:\s*["']local["']|cacheLocalVault|createLocalAccount|loginLocal/i, "o frontend não deve oferecer fallback local");
 assert.doesNotMatch(html, /googleAuth|googleButton|Entrar com Google/i, "o login Google não deve aparecer na interface");
 assert.doesNotMatch(js, /googleClientId|loadGoogleAuth|handleGoogleCredential|gsi\/client|idToken/i, "o frontend não deve depender do login Google");
 assert.doesNotMatch(backend, /verifyIdToken_|oauth2\.googleapis|GOOGLE_CLIENT_ID|ALLOWED_EMAILS|idToken/i, "o backend não deve validar login Google");
+assert.doesNotMatch(backend, /DriveApp|writeDriveSnapshot_|backupWarning|folder_|DRIVE_FOLDER_ID|MimeType\.PLAIN_TEXT/i, "o backend não deve criar arquivos ou depender de pasta do Drive");
+assert.doesNotMatch(js, /backupWarning|snapshots? automáticos?|snapshot[^\n]*(?:Drive|pasta)/i, "o frontend não deve prometer snapshots no Drive");
 assert.doesNotMatch(html, /Enaex|enaex/i, "a marca de referência não deve aparecer na interface");
 assert.doesNotMatch(js, /password\s*[:=]\s*["'][^"']+["']/i, "não deve haver senha fixa no código");
 console.log(`validate: ${required.length} arquivos e contratos principais OK`);

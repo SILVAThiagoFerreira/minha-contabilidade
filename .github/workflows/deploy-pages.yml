@@ -25,10 +25,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Prepare static artifact
+        run: |
+          mkdir -p pages
+          cp index.html styles.css app.js config.js pages/
+          touch pages/.nojekyll
       - name: Upload static artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: pages
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4

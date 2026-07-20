@@ -1,32 +1,23 @@
 # Configurar o armazenamento online
 
-O GitHub Pages hospeda somente a interface. O Apps Script executa como o proprietário da pasta, valida o cadastro e a senha, grava a contabilidade na planilha e cria snapshots na mesma pasta do Drive.
+O GitHub Pages hospeda somente a interface. O Apps Script executa como o proprietário da implantação, valida o cadastro e a senha e grava a contabilidade em uma única planilha online. O histórico das revisões fica na aba VaultJournal da mesma planilha.
 
 Não existe modo local. O navegador não guarda contas, credenciais ou cofre em localStorage, sessionStorage, IndexedDB ou arquivos automáticos. A sessão fica apenas na memória enquanto a página está aberta.
 
-## 1. Configurar a pasta e a planilha
+## 1. Configurar a planilha
 
-Na conta proprietária do Drive:
-
-1. Use a pasta escolhida para o projeto.
-2. Mantenha o acesso da pasta como Restrito.
-3. Informe o ID da planilha na propriedade SPREADSHEET_ID.
-4. Informe o ID da pasta na propriedade DRIVE_FOLDER_ID.
-
-O ID da pasta e o ID da planilha não ficam no frontend ou no artefato publicado do Pages. Eles ficam somente nas propriedades privadas do Apps Script.
+Use a planilha online escolhida como fonte oficial e mantenha o acesso dela restrito à sua conta. O ID não fica no frontend nem no artefato publicado do Pages; ele fica somente nas propriedades privadas do Apps Script.
 
 ## 2. Publicar o Apps Script
 
-1. Abra script.google.com com a conta proprietária da pasta.
+1. Abra script.google.com com a conta proprietária da planilha.
 2. Abra o projeto Minha Contabilidade - Backend.
 3. Copie o conteúdo de backend/Code.gs para o editor do Apps Script.
 4. Em Configurações do projeto, abra Propriedades do script e configure:
 
 | Propriedade | Valor |
 | --- | --- |
-| DRIVE_FOLDER_ID | ID da pasta escolhida no Google Drive |
-| SPREADSHEET_ID | ID da planilha usada como banco |
-| SPREADSHEET_NAME | Opcional; padrão Minha Contabilidade - Banco |
+| SPREADSHEET_ID | `1F29KEP0--zHP8YtgP_zui3GZUmHP_5NFDQGHWdSwqcI` |
 
 Em Implantar, crie uma implantação como Aplicativo da Web:
 
@@ -34,7 +25,7 @@ Em Implantar, crie uma implantação como Aplicativo da Web:
 - quem tem acesso: qualquer pessoa;
 - copie a URL que termina em /exec.
 
-Na primeira execução, o proprietário precisa autorizar o acesso do script ao Drive e ao Sheets. Essa autorização permite que o backend grave na pasta; não é uma tela de login do aplicativo.
+Na primeira execução, o proprietário precisa autorizar o acesso do script ao Google Sheets. Essa autorização permite que o backend grave na planilha; não é uma tela de login do aplicativo.
 
 ## 3. Ligar o frontend
 
@@ -62,16 +53,16 @@ Cada sincronização é gravada nesta ordem:
 
 1. VaultJournal recebe uma nova linha sem apagar revisões anteriores;
 2. VaultCurrent recebe o estado corrente;
-3. a pasta do Drive recebe um snapshot JSON novo, sem sobrescrever o anterior.
+3. nenhuma pasta ou arquivo auxiliar é criado: o histórico permanece na própria planilha.
 
 O backend usa LockService, controla a revisão base e rejeita uma gravação feita sobre uma versão antiga. Se o estado corrente estiver inválido, a última revisão válida do journal é promovida novamente para VaultCurrent antes de continuar.
 
-Os snapshots não são apagados automaticamente. Eles são a camada de recuperação online do sistema.
+Se VaultCurrent precisar ser recuperado, o backend usa a última revisão válida de VaultJournal. A planilha deve ser mantida como a fonte online oficial e, se desejar uma cópia manual adicional, faça-a pelo próprio Google Sheets, fora do fluxo automático do aplicativo.
 
 ## 6. Operação
 
 - Depois de sair ou recarregar a página, faça login novamente.
 - Uma conta criada em um dispositivo pode ser usada em outro porque o cadastro está na planilha.
 - Em falha de rede ou indisponibilidade do Apps Script, a alteração não é apresentada como salva.
-- Não coloque o ID da pasta, a URL da planilha ou dados financeiros no repositório.
-- O JSON da contabilidade é legível para o proprietário da planilha e da pasta; mantenha as permissões do Drive restritas.
+- Não coloque a URL completa da planilha ou dados financeiros no repositório.
+- O JSON fornecido para referência não é importado nem alterado pelo aplicativo.
