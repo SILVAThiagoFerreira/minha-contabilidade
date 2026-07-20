@@ -43,6 +43,8 @@ O backend cria ou valida as seguintes abas:
 - VaultCurrent: uma revisão corrente por usuário;
 - VaultJournal: histórico append-only de cada sincronização.
 
+O JSON de cada usuário mantém as coleções `accounts`, `transactions`, `fixedCosts`, `debts`, `investments`, `cdbs` (espelho de compatibilidade) e `savings`. Os investimentos antigos em `cdbs` são lidos sem perda e passam a aparecer na aba Investimentos.
+
 O frontend calcula o identificador do usuário para localizar o cadastro, mas o backend confirma o mesmo hash, procura o usuário na aba Users e verifica a senha com salt. O backend não aceita get ou sync sem uma senha válida. A senha é enviada apenas pela conexão HTTPS do Web App e nunca é gravada em texto puro; a planilha guarda apenas o salt e o verificador.
 
 O payload de cada usuário fica em uma célula JSON com limite operacional de 45.000 caracteres. O backend valida as coleções antes de gravar e usa checksum SHA-256 para detectar corrupção.

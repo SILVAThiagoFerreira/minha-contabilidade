@@ -1,6 +1,6 @@
 # Minha contabilidade
 
-Painel online para organizar entradas, saídas, contas bancárias, custos fixos e aplicações em CDB. A interface usa grafite, vermelho de destaque, divisores finos e cartões operacionais, sem logo de terceiros.
+Painel online para organizar entradas, saídas, contas bancárias, custos fixos, dívidas e investimentos. A interface usa grafite, vermelho de destaque, divisores finos e cartões operacionais, sem logo de terceiros.
 
 ## Recursos
 
@@ -10,10 +10,12 @@ Painel online para organizar entradas, saídas, contas bancárias, custos fixos 
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
 - lançamentos por conta e categoria;
 - contas correntes e poupanças por banco;
-- CDBs vinculados diretamente a uma conta já cadastrada;
+- investimentos vinculados diretamente a uma conta já cadastrada;
 - gerenciamento de poupança com estimativa mensal e correção manual pelo extrato;
 - custos fixos ativos ou pausados;
-- módulo específico para CDB, com taxa, liquidez e vencimento;
+- dívidas com saldo atual, parcela, vencimento, conta de pagamento e edição;
+- módulo de investimentos com CDB, Tesouro, fundos, ações, ETFs, LCI/LCA e outros;
+- projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
 - análises mensais, categorias e taxa de sobra;
 - workflow de GitHub Pages.
 
@@ -27,11 +29,15 @@ O navegador não usa localStorage, sessionStorage, IndexedDB, cache de cofre ou 
 
 Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar.
 
-## CDB
+## Investimentos
 
-O módulo CDB trata projeções como estimativas. A projeção mensal só é calculada para uma taxa prefixada cadastrada e não substitui o extrato da instituição, impostos ou variações do CDI.
+O módulo de investimentos trata projeções como estimativas brutas. Para um CDB DI pós-fixado, informe o percentual do CDI e a taxa-base do CDI que deseja usar na simulação; o sistema calcula a taxa equivalente e a estimativa mensal. Para os demais investimentos, é possível usar taxa prefixada, taxa manual ou deixar a projeção desativada. Nenhuma taxa de mercado é inventada ou atualizada automaticamente.
 
-Ao cadastrar um CDB, a instituição é escolhida entre as contas existentes. CDBs antigos que ainda tenham apenas o texto do banco continuam sendo exibidos normalmente.
+Ao cadastrar um investimento, a conta/banco é escolhida entre as contas existentes. Investimentos antigos no formato CDB continuam compatíveis e aparecem na nova aba “Investimentos”; a edição permite completar a conta e o CDI-base sem recriar a posição.
+
+## Dívidas
+
+Dívidas ficam separadas dos custos fixos. O saldo atual entra no cálculo do patrimônio líquido, enquanto a parcela mensal aparece como compromisso. Uma dívida pode ser editada, pausada ou excluída, e a conta de pagamento é escolhida entre as contas cadastradas.
 
 ## Poupança
 

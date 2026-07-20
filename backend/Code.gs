@@ -176,9 +176,11 @@ function blankVault_(displayName) {
     version: 1,
     profile: { displayName: displayName || "", currency: "BRL" },
     accounts: [],
+    debts: [],
     transactions: [],
     fixedCosts: [],
     cdbs: [],
+    investments: [],
     savings: [],
     updatedAt: new Date().toISOString()
   };
@@ -186,7 +188,7 @@ function blankVault_(displayName) {
 
 function jsonPayload_(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Dados do usuário ausentes ou inválidos.");
-  ["accounts", "transactions", "fixedCosts", "cdbs", "savings"].forEach((name) => {
+  ["accounts", "debts", "transactions", "fixedCosts", "cdbs", "investments", "savings"].forEach((name) => {
     if (payload[name] !== undefined && !Array.isArray(payload[name])) throw new Error("Estrutura inválida em " + name + ".");
     if (Array.isArray(payload[name]) && payload[name].length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de registros excedida em " + name + ".");
   });

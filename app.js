@@ -6,8 +6,10 @@
     dashboard: "Visão geral",
     lancamentos: "Lançamentos",
     contas: "Contas",
+    dividas: "Dívidas",
     fixos: "Custos fixos",
-    cdb: "CDB",
+    cdb: "Investimentos",
+    investimentos: "Investimentos",
     analises: "Análises",
     configuracoes: "Configurações"
   };
@@ -87,9 +89,11 @@
       version: 1,
       profile: { displayName, currency: "BRL" },
       accounts: [],
+      debts: [],
       transactions: [],
       fixedCosts: [],
       cdbs: [],
+      investments: [],
       savings: [],
       updatedAt: new Date().toISOString()
     };
@@ -99,11 +103,30 @@
     const normalized = { ...blankVault(), ...(value || {}) };
     normalized.profile = { ...blankVault().profile, ...(value?.profile || {}) };
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
+    normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
     normalized.transactions = Array.isArray(value?.transactions) ? value.transactions : [];
     normalized.fixedCosts = Array.isArray(value?.fixedCosts) ? value.fixedCosts : [];
-    normalized.cdbs = Array.isArray(value?.cdbs) ? value.cdbs : [];
+    const legacyCdbs = Array.isArray(value?.cdbs) ? value.cdbs : [];
+    const storedInvestments = Array.isArray(value?.investments) ? value.investments : [];
+    const investmentById = new Map();
+    const addInvestment = (item, fallbackType = "outro") => {
+      const normalizedItem = { ...item, id: item?.id || uid("investment"), type: item?.type || fallbackType };
+      if (!investmentById.has(normalizedItem.id)) investmentById.set(normalizedItem.id, normalizedItem);
+    };
+    storedInvestments.forEach((item) => addInvestment(item));
+    legacyCdbs.forEach((item) => addInvestment(item, "cdb"));
+    normalized.investments = [...investmentById.values()];
+    normalized.cdbs = legacyCdbs;
     normalized.savings = Array.isArray(value?.savings) ? value.savings : [];
     return normalized;
+  }
+
+  function syncLegacyCdbs() {
+    if (!vault) return;
+    vault.cdbs = vault.investments.filter((item) => (item.type || "cdb") === "cdb").map((item) => ({
+      ...item,
+      rateType: item.rateType === "cdi" ? "CDI" : item.rateType
+    }));
   }
 
   async function remoteAccountId(username) {
@@ -141,6 +164,7 @@
 
   async function saveCurrentVault() {
     if (!vault || !session) return;
+    syncLegacyCdbs();
     vault.updatedAt = new Date().toISOString();
     saveQueue = saveQueue.catch(() => {}).then(async () => {
       const result = await remoteRequest("sync", session, vault, session.revision || 0);
@@ -199,7 +223,8 @@
   }
 
   function setView(viewName) {
-    const view = VIEWS[viewName] ? viewName : "dashboard";
+    const normalizedView = viewName === "investimentos" ? "cdb" : viewName;
+    const view = VIEWS[normalizedView] ? normalizedView : "dashboard";
     $$("[data-view]").forEach((item) => item.classList.toggle("is-active", item.dataset.view === view));
     $$("[data-view-target]").forEach((item) => item.classList.toggle("is-active", item.dataset.viewTarget === view));
     $("#pageTitle").textContent = VIEWS[view];
@@ -256,6 +281,55 @@
     return vault.accounts.reduce((sum, account) => sum + accountBalance(account.id), 0);
   }
 
+  function totalInvested() {
+    return vault.investments.reduce((sum, item) => sum + toAmount(item.principal), 0);
+  }
+
+  function totalFixedCosts() {
+    return vault.fixedCosts.filter((item) => item.active !== false).reduce((sum, item) => sum + toAmount(item.amount), 0);
+  }
+
+  function totalDebt() {
+    return vault.debts.filter((item) => item.active !== false).reduce((sum, item) => sum + toAmount(item.balance), 0);
+  }
+
+  function totalDebtInstallments() {
+    return vault.debts.filter((item) => item.active !== false).reduce((sum, item) => sum + toAmount(item.installment), 0);
+  }
+
+  function investmentTypeLabel(type) {
+    return ({ cdb: "CDB", tesouro: "Tesouro Direto", fundo: "Fundo de investimento", acao: "Ações", etf: "ETF", lci: "LCI / LCA", outro: "Outro investimento" }[type] || "Investimento");
+  }
+
+  function normalizedRateType(item) {
+    const value = String(item?.rateType || "").toLowerCase();
+    if (value === "cdi" || value === "cdi-pos" || value === "pós-fixado" || value === "pos-fixado") return "cdi";
+    if (value === "pre" || value === "prefixado") return "pre";
+    if (value === "manual" || value === "taxa fixa") return "manual";
+    return value;
+  }
+
+  function investmentProjection(item) {
+    const principal = toAmount(item.principal);
+    const rate = toAmount(item.rate);
+    const rateType = normalizedRateType(item);
+    let annualRate = 0;
+    let label = "";
+    if (rateType === "cdi") {
+      const benchmarkRate = toAmount(item.benchmarkRate ?? item.cdiRate);
+      if (!benchmarkRate) return { monthly: null, annual: null, label: "Informe o CDI base" };
+      annualRate = benchmarkRate * rate / 100;
+      label = `${rate}% do CDI (${benchmarkRate}% a.a. base)`;
+    } else if (rateType === "pre" || rateType === "manual") {
+      annualRate = rate;
+      label = `${rate}% a.a.`;
+    } else {
+      return { monthly: null, annual: null, label: "Sem projeção cadastrada" };
+    }
+    const monthly = principal * (Math.pow(1 + annualRate / 100, 1 / 12) - 1);
+    return { monthly, annual: annualRate, label };
+  }
+
   function accountById(accountId) {
     return vault.accounts.find((account) => account.id === accountId);
   }
@@ -295,8 +369,8 @@
     const expense = sumTransactions(periodTransactions, "saida");
     const result = income - expense;
     const savingsRate = income ? Math.round((result / income) * 100) : 0;
-    const fixedTotal = vault.fixedCosts.filter((item) => item.active !== false).reduce((sum, item) => sum + toAmount(item.amount), 0);
-    const cdbTotal = vault.cdbs.reduce((sum, item) => sum + toAmount(item.principal), 0);
+    const debtTotal = totalDebt();
+    const invested = totalInvested();
     const displayName = vault.profile.displayName || "você";
     $("#dashboardGreeting").textContent = `Olá, ${displayName.split(" ")[0]}.`;
     $("#dashboardLead").textContent = `Este é o retrato do seu dinheiro em ${monthLabel(period)}.`;
@@ -307,10 +381,16 @@
       metricCard("SAÍDAS", formatShortCurrency(expense), "no período selecionado", ""),
       metricCard("RESULTADO", formatShortCurrency(result), income ? `${savingsRate}% de sobra no mês` : "adicione uma entrada para calcular", result >= 0 ? "metric-card--positive" : "metric-card--warning")
     ].join("");
+    $("#dashboardWealthMetrics").innerHTML = [
+      metricCard("SALDO EM CONTAS", formatShortCurrency(totalBalance()), "dinheiro disponível", "metric-card--accent"),
+      metricCard("TOTAL INVESTIDO", formatShortCurrency(invested), `${vault.investments.length} posição(ões)`, "metric-card--positive"),
+      metricCard("DÍVIDAS", formatShortCurrency(debtTotal), debtTotal ? `${vault.debts.filter((item) => item.active !== false).length} dívida(s) ativa(s)` : "nenhuma dívida cadastrada", "metric-card--warning"),
+      metricCard("PATRIMÔNIO LÍQUIDO", formatShortCurrency(totalBalance() + invested - debtTotal), "contas + investimentos − dívidas", "")
+    ].join("");
     renderCashflow();
     renderCategories(periodTransactions);
     renderUpcomingFixedCosts();
-    renderAccountSnapshot(cdbTotal);
+    renderAccountSnapshot(invested);
   }
 
   function renderCashflow() {
@@ -337,10 +417,10 @@
     $("#upcomingFixedCosts").innerHTML = items.length ? items.map((item) => `<div class="list-row"><div class="list-row-main"><span class="due-badge">${escapeHtml(item.dueDay)}<span>º</span></span><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.category || "Custo fixo")}</small></div></div><strong class="row-value">${formatCurrency(item.amount)}</strong></div>`).join("") : `<div class="empty-state"><strong>Seu mês ainda está aberto.</strong><span>Cadastre o primeiro custo fixo.</span><button class="link-button" data-view-link="fixos">Cadastrar agora →</button></div>`;
   }
 
-  function renderAccountSnapshot(cdbTotal = 0) {
+  function renderAccountSnapshot(invested = 0) {
     const accounts = vault.accounts.slice().sort((a, b) => accountBalance(b.id) - accountBalance(a.id)).slice(0, 4);
     const markup = accounts.length ? accounts.map((account) => `<div class="account-row"><div class="account-row-main"><span class="account-mark">${escapeHtml(account.name.slice(0, 2).toUpperCase())}</span><div><strong>${escapeHtml(account.name)}</strong><small>${account.type === "poupanca" ? "Poupança" : "Conta corrente"}</small></div></div><strong class="row-value">${formatCurrency(accountBalance(account.id))}</strong></div>`).join("") : `<div class="empty-state"><strong>Cadastre seus bancos.</strong><span>Assim o saldo consolidado fará sentido.</span><button class="link-button" data-view-link="contas">Adicionar conta →</button></div>`;
-    $("#accountSnapshot").innerHTML = markup + (accounts.length && cdbTotal ? `<div class="account-row"><div class="account-row-main"><span class="account-mark">C</span><div><strong>CDB</strong><small>Investimentos separados</small></div></div><strong class="row-value">${formatCurrency(cdbTotal)}</strong></div>` : "");
+    $("#accountSnapshot").innerHTML = markup + (accounts.length && invested ? `<div class="account-row"><div class="account-row-main"><span class="account-mark">I</span><div><strong>Investimentos</strong><small>Aplicações separadas</small></div></div><strong class="row-value">${formatCurrency(invested)}</strong></div>` : "");
   }
 
   function renderTransactions() {
@@ -354,8 +434,8 @@
   function renderAccounts() {
     const balance = totalBalance();
     const current = transactionsForPeriod().filter((item) => item.type === "entrada").reduce((sum, item) => sum + toAmount(item.amount), 0);
-    const cdb = vault.cdbs.reduce((sum, item) => sum + toAmount(item.principal), 0);
-    $("#accountMetrics").innerHTML = [metricCard("SALDO EM CONTAS", formatShortCurrency(balance), "saldo calculado", "metric-card--accent"), metricCard("ENTRADAS DO MÊS", formatShortCurrency(current), "movimentos positivos", "metric-card--positive"), metricCard("SEPARADO EM CDB", formatShortCurrency(cdb), `${vault.cdbs.length} posição(ões)`, "")].join("");
+    const invested = totalInvested();
+    $("#accountMetrics").innerHTML = [metricCard("SALDO EM CONTAS", formatShortCurrency(balance), "saldo calculado", "metric-card--accent"), metricCard("ENTRADAS DO MÊS", formatShortCurrency(current), "movimentos positivos", "metric-card--positive"), metricCard("TOTAL INVESTIDO", formatShortCurrency(invested), `${vault.investments.length} posição(ões)`, "")].join("");
     $("#accountList").innerHTML = vault.accounts.length ? vault.accounts.map((account) => `<div class="account-row"><div class="account-row-main"><span class="account-mark">${escapeHtml(account.name.slice(0, 2).toUpperCase())}</span><div><strong>${escapeHtml(account.name)}</strong><small>${account.type === "poupanca" ? "Poupança" : "Conta corrente"}${account.nickname ? ` · ${escapeHtml(account.nickname)}` : ""}</small></div></div><strong class="row-value">${formatCurrency(accountBalance(account.id))}</strong><span class="table-actions"><button class="table-action" type="button" data-action="delete-account" data-id="${account.id}" title="Excluir conta">×</button></span></div>`).join("") : `<div class="empty-state"><strong>Nenhuma conta cadastrada.</strong><span>Cadastre seu primeiro banco para acompanhar os saldos.</span></div>`;
     renderSavingsManagement();
   }
@@ -393,6 +473,16 @@
     fillSavingsForm();
   }
 
+  function renderDebts() {
+    const active = vault.debts.filter((item) => item.active !== false);
+    const balance = active.reduce((sum, item) => sum + toAmount(item.balance), 0);
+    const installments = active.reduce((sum, item) => sum + toAmount(item.installment), 0);
+    $("#debtMetrics").innerHTML = [metricCard("SALDO DE DÍVIDAS", formatShortCurrency(balance), active.length ? `${active.length} compromisso(s) ativo(s)` : "nenhuma dívida cadastrada", "metric-card--warning"), metricCard("PARCELAS MENSAIS", formatShortCurrency(installments), "valor informado por mês", "metric-card--accent"), metricCard("MÉDIA POR DÍVIDA", formatShortCurrency(active.length ? balance / active.length : 0), active.length ? "saldo atual médio" : "cadastre uma dívida", "")].join("");
+    const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
+    const items = vault.debts.slice().sort((a, b) => Number(a.dueDay || 99) - Number(b.dueDay || 99));
+    $("#debtTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DÍVIDA</th><th>CREDOR</th><th>SALDO ATUAL</th><th>PARCELA</th><th>VENC.</th><th>CONTA</th><th>STATUS</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.creditor || "—")}</td><td class="number">${formatCurrency(item.balance)}</td><td class="number">${formatCurrency(item.installment)}</td><td>${item.dueDay ? `Dia ${escapeHtml(item.dueDay)}` : "—"}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td><span class="status-pill ${item.active !== false ? "status-pill--green" : "status-pill--muted"}">${item.active !== false ? "ATIVA" : "PAUSADA"}</span></td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-debt" data-id="${item.id}" title="Editar dívida" aria-label="Editar dívida">✎</button><button class="table-action" type="button" data-action="toggle-debt" data-id="${item.id}" title="Ativar ou pausar" aria-label="Ativar ou pausar">↻</button><button class="table-action" type="button" data-action="delete-debt" data-id="${item.id}" title="Excluir dívida" aria-label="Excluir dívida">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhuma dívida cadastrada.</strong><span>Se você tiver parcelas ou saldo devedor, registre aqui para refletir no patrimônio líquido.</span></div>`;
+  }
+
   function renderFixedCosts() {
     const active = vault.fixedCosts.filter((item) => item.active !== false);
     const total = active.reduce((sum, item) => sum + toAmount(item.amount), 0);
@@ -401,17 +491,22 @@
     $("#fixedMetrics").innerHTML = [metricCard("CUSTO MENSAL", formatShortCurrency(total), "compromissos ativos", "metric-card--accent"), metricCard("ITENS ATIVOS", integerFormatter.format(active.length), "despesas recorrentes", ""), metricCard("MÉDIA POR ITEM", formatShortCurrency(average), next ? `próximo vencimento: dia ${next}` : "cadastre um compromisso", "metric-card--warning")].join("");
     const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
     const items = vault.fixedCosts.slice().sort((a, b) => Number(a.dueDay) - Number(b.dueDay));
-    $("#fixedCostTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>VENC.</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th>STATUS</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>Dia ${escapeHtml(item.dueDay)}</td><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number">${formatCurrency(item.amount)}</td><td><span class="status-pill ${item.active !== false ? "status-pill--green" : "status-pill--muted"}">${item.active !== false ? "ATIVO" : "PAUSADO"}</span></td><td><span class="table-actions"><button class="table-action" type="button" data-action="toggle-fixed" data-id="${item.id}" title="Ativar ou pausar">↻</button><button class="table-action" type="button" data-action="delete-fixed" data-id="${item.id}" title="Excluir">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum custo fixo cadastrado.</strong><span>Registre aluguel, assinaturas, contas e outros compromissos mensais.</span></div>`;
+    $("#fixedCostTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>VENC.</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th>STATUS</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>Dia ${escapeHtml(item.dueDay)}</td><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number">${formatCurrency(item.amount)}</td><td><span class="status-pill ${item.active !== false ? "status-pill--green" : "status-pill--muted"}">${item.active !== false ? "ATIVO" : "PAUSADO"}</span></td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-fixed" data-id="${item.id}" title="Editar custo fixo" aria-label="Editar custo fixo">✎</button><button class="table-action" type="button" data-action="toggle-fixed" data-id="${item.id}" title="Ativar ou pausar" aria-label="Ativar ou pausar">↻</button><button class="table-action" type="button" data-action="delete-fixed" data-id="${item.id}" title="Excluir" aria-label="Excluir custo fixo">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum custo fixo cadastrado.</strong><span>Registre aluguel, assinaturas, contas e outros compromissos mensais.</span></div>`;
   }
 
   function renderCdb() {
-    const positions = vault.cdbs;
-    const principal = positions.reduce((sum, item) => sum + toAmount(item.principal), 0);
-    const prefixPositions = positions.filter((item) => item.rateType === "pre");
-    const monthlyProjection = prefixPositions.reduce((sum, item) => sum + (toAmount(item.principal) * (toAmount(item.rate) / 100) / 12), 0);
+    renderInvestments();
+  }
+
+  function renderInvestments() {
+    const positions = vault.investments;
+    const principal = totalInvested();
+    const projections = positions.map((item) => investmentProjection(item)).filter((item) => item.monthly !== null);
+    const monthlyProjection = projections.reduce((sum, item) => sum + item.monthly, 0);
     const nextMaturity = positions.filter((item) => item.maturityAt).sort((a, b) => String(a.maturityAt).localeCompare(String(b.maturityAt)))[0]?.maturityAt;
-    $("#cdbMetrics").innerHTML = [metricCard("TOTAL APLICADO", formatShortCurrency(principal), `${positions.length} posição(ões)`, "metric-card--accent"), metricCard("PROJEÇÃO MENSAL", prefixPositions.length ? formatShortCurrency(monthlyProjection) : "—", prefixPositions.length ? "estimativa bruta prefixada" : "informe uma taxa prefixada", "metric-card--positive"), metricCard("PRÓXIMO VENCIMENTO", nextMaturity ? formatDate(nextMaturity) : "—", nextMaturity ? "conforme cadastro" : "nenhum vencimento informado", "")].join("");
-    $("#cdbTable").innerHTML = positions.length ? `<table class="data-table"><thead><tr><th>POSIÇÃO</th><th>CONTA / BANCO</th><th>APLICADO</th><th>TAXA</th><th>LIQUIDEZ</th><th>VENCIMENTO</th><th></th></tr></thead><tbody>${positions.map((item) => { const account = accountById(item.accountId); const institution = account ? `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` : item.bank || "—"; return `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(institution)}</td><td class="number">${formatCurrency(item.principal)}</td><td>${escapeHtml(item.rate)}${item.rateType === "CDI" ? "% CDI" : "% a.a."}</td><td>${escapeHtml(item.liquidity)}</td><td>${formatDate(item.maturityAt)}</td><td><span class="table-actions"><button class="table-action" type="button" data-action="delete-cdb" data-id="${item.id}" title="Excluir">×</button></span></td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum CDB cadastrado.</strong><span>Separe suas aplicações do saldo das contas e acompanhe o vencimento.</span></div>`;
+    const projectionMeta = projections.length ? `${projections.length} posição(ões) com estimativa bruta` : positions.length ? "informe o CDI base ou uma taxa" : "cadastre um investimento";
+    $("#cdbMetrics").innerHTML = [metricCard("TOTAL INVESTIDO", formatShortCurrency(principal), `${positions.length} posição(ões)`, "metric-card--accent"), metricCard("PROJEÇÃO MENSAL", projections.length ? formatShortCurrency(monthlyProjection) : "—", projectionMeta, "metric-card--positive"), metricCard("PRÓXIMO VENCIMENTO", nextMaturity ? formatDate(nextMaturity) : "—", nextMaturity ? "conforme cadastro" : "nenhum vencimento informado", "")].join("");
+    $("#cdbTable").innerHTML = positions.length ? `<table class="data-table"><thead><tr><th>INVESTIMENTO</th><th>TIPO</th><th>CONTA / BANCO</th><th>APLICADO</th><th>REFERÊNCIA</th><th>PROJEÇÃO / MÊS</th><th>VENCIMENTO</th><th></th></tr></thead><tbody>${positions.map((item) => { const account = accountById(item.accountId); const institution = account ? `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` : item.bank || "—"; const projection = investmentProjection(item); const rateType = normalizedRateType(item); const rateLabel = rateType === "cdi" ? `${item.rate || 0}% CDI` : rateType === "pre" ? `${item.rate || 0}% a.a.` : item.rate ? `${item.rate}% a.a.` : "—"; return `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td><span class="status-pill status-pill--muted">${escapeHtml(investmentTypeLabel(item.type || "cdb"))}</span></td><td>${escapeHtml(institution)}</td><td class="number">${formatCurrency(item.principal)}</td><td>${escapeHtml(rateLabel)}${rateType === "cdi" && item.benchmarkRate ? `<br><small class="muted-cell">CDI base: ${escapeHtml(item.benchmarkRate)}% a.a.</small>` : ""}</td><td class="number">${projection.monthly === null ? `<span title="${escapeHtml(projection.label)}">—</span>` : formatCurrency(projection.monthly)}</td><td>${formatDate(item.maturityAt)}</td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-investment" data-id="${item.id}" title="Editar investimento" aria-label="Editar investimento">✎</button><button class="table-action" type="button" data-action="delete-investment" data-id="${item.id}" title="Excluir investimento" aria-label="Excluir investimento">×</button></span></td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum investimento cadastrado.</strong><span>Comece pelo CDB ou adicione outro tipo de investimento.</span></div>`;
   }
 
   function getMonthlySummary(count = 6) {
@@ -432,18 +527,32 @@
     const topCategory = Object.entries(grouped).sort((a, b) => b[1] - a[1])[0];
     const selectedMonth = months[months.length - 1];
     const savings = selectedMonth.income ? Math.round(selectedMonth.rate) : 0;
-    const cdb = vault.cdbs.reduce((sum, item) => sum + toAmount(item.principal), 0);
+    const invested = totalInvested();
+    const debt = totalDebt();
+    const netWorth = totalBalance() + invested - debt;
     $("#analysisHighlights").innerHTML = [
       `<article class="insight-card"><p class="eyebrow">TAXA DE SOBRA</p><h3>${savings}%</h3><p>do que entrou em ${monthLabel(selectedMonth.period)} ficou no caixa.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">MAIOR CATEGORIA</p><h3>${topCategory ? escapeHtml(topCategory[0]) : "—"}</h3><p>${topCategory ? `${formatCurrency(topCategory[1])} em saídas no período.` : "Cadastre saídas para descobrir."}</p></article>`,
-      `<article class="insight-card"><p class="eyebrow">PARTICIPAÇÃO EM CDB</p><h3>${cdb + totalBalance() ? Math.round(cdb / (cdb + totalBalance()) * 100) : 0}%</h3><p>do patrimônio conhecido está separado em investimento.</p></article>`
+      `<article class="insight-card"><p class="eyebrow">TOTAL INVESTIDO</p><h3>${formatShortCurrency(invested)}</h3><p>${vault.investments.length} posição(ões) entre seus investimentos.</p></article>`,
+      `<article class="insight-card"><p class="eyebrow">PATRIMÔNIO LÍQUIDO</p><h3>${formatShortCurrency(netWorth)}</h3><p>contas + investimentos − ${formatShortCurrency(debt)} em dívidas.</p></article>`
     ].join("");
     const max = Math.max(...months.flatMap((item) => [Math.abs(item.income), Math.abs(item.expense)]), 1);
     $("#analysisBars").innerHTML = months.map((item) => `<div class="analysis-bar-group"><div class="analysis-bar analysis-bar--positive" style="height:${Math.max(3, item.income / max * 100)}%" title="Entradas ${formatCurrency(item.income)}"></div><div class="analysis-bar analysis-bar--negative" style="height:${Math.max(3, item.expense / max * 100)}%" title="Saídas ${formatCurrency(item.expense)}"></div><span class="analysis-bar-label">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("");
     const totalExpense = expenseItems.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const categories = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
     $("#analysisCategories").innerHTML = categories.length ? categories.map(([category, amount]) => `<div class="analysis-category"><span>${escapeHtml(category)}</span><div class="analysis-track"><span style="width:${totalExpense ? amount / totalExpense * 100 : 0}%"></span></div><strong>${formatShortCurrency(amount)}</strong></div>`).join("") : `<div class="empty-state"><strong>Sem categorias ainda.</strong><span>Os pesos aparecerão com seus lançamentos.</span></div>`;
+    renderInvestmentAnalysis();
     $("#analysisTable").innerHTML = `<table class="data-table"><thead><tr><th>MÊS</th><th>ENTRADAS</th><th>SAÍDAS</th><th>RESULTADO</th><th>TAXA DE SOBRA</th></tr></thead><tbody>${months.map((item) => `<tr><td><strong>${monthLabel(item.period)}</strong></td><td class="number positive-number">${formatCurrency(item.income)}</td><td class="number negative-number">${formatCurrency(item.expense)}</td><td class="number ${item.result >= 0 ? "positive-number" : "negative-number"}">${formatCurrency(item.result)}</td><td class="number">${item.income ? `${Math.round(item.rate)}%` : "—"}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  function renderInvestmentAnalysis() {
+    const total = totalInvested();
+    const grouped = Object.entries(vault.investments.reduce((map, item) => {
+      const key = item.type || "outro";
+      map[key] = (map[key] || 0) + toAmount(item.principal);
+      return map;
+    }, {})).sort((a, b) => b[1] - a[1]);
+    $("#analysisInvestments").innerHTML = grouped.length ? `<table class="data-table"><thead><tr><th>TIPO</th><th>POSIÇÕES</th><th>VALOR</th><th>PARTICIPAÇÃO</th></tr></thead><tbody>${grouped.map(([type, amount]) => { const count = vault.investments.filter((item) => (item.type || "outro") === type).length; return `<tr><td><strong>${escapeHtml(investmentTypeLabel(type))}</strong></td><td>${count}</td><td class="number">${formatCurrency(amount)}</td><td class="number">${total ? Math.round(amount / total * 100) : 0}%</td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum investimento para analisar.</strong><span>As participações por tipo aparecerão aqui.</span></div>`;
   }
 
   function renderSettings() {
@@ -461,8 +570,9 @@
     renderDashboard();
     renderTransactions();
     renderAccounts();
+    renderDebts();
     renderFixedCosts();
-    renderCdb();
+    renderInvestments();
     renderAnalyses();
     renderSettings();
   }
@@ -475,11 +585,46 @@
       $("input[name='transactionType'][value='saida']", form).checked = true;
       $("#transactionCategory").value = "Alimentação";
     }
-    if (form.id === "cdbForm") $("input[name='startedAt']", form).value = todayIso();
+    if (form.id === "fixedCostForm") {
+      $("input[name='active']", form).checked = true;
+      setFormMode(form, "fixed", false);
+    }
+    if (form.id === "debtForm") {
+      $("input[name='active']", form).checked = true;
+      setFormMode(form, "debt", false);
+    }
+    if (form.id === "cdbForm") {
+      $("input[name='startedAt']", form).value = todayIso();
+      $("select[name='investmentType']", form).value = "cdb";
+      $("select[name='rateType']", form).value = "cdi";
+      setFormMode(form, "investment", false);
+    }
+  }
+
+  function setFormMode(form, entity, editing) {
+    const title = $("h3", form.closest(".form-panel"));
+    const eyebrow = $(".eyebrow", form.closest(".form-panel"));
+    const submit = $("button[type='submit']", form);
+    const cancel = $("[data-action='cancel-form']", form);
+    if (entity === "fixed") {
+      if (eyebrow) eyebrow.textContent = editing ? "EDITAR COMPROMISSO" : "NOVO COMPROMISSO";
+      if (title) title.textContent = editing ? "Editar custo fixo" : "Cadastrar custo fixo";
+      if (submit) submit.textContent = editing ? "Salvar alterações" : "Salvar custo fixo";
+    } else if (entity === "debt") {
+      if (eyebrow) eyebrow.textContent = editing ? "EDITAR DÍVIDA" : "NOVA DÍVIDA";
+      if (title) title.textContent = editing ? "Editar dívida" : "Cadastrar dívida";
+      if (submit) submit.textContent = editing ? "Salvar alterações" : "Salvar dívida";
+    } else {
+      if (eyebrow) eyebrow.textContent = editing ? "EDITAR INVESTIMENTO" : "NOVO INVESTIMENTO";
+      if (title) title.textContent = editing ? "Editar investimento" : "Adicionar investimento";
+      if (submit) submit.textContent = editing ? "Salvar alterações" : "Salvar investimento";
+    }
+    if (cancel) cancel.classList.toggle("is-hidden", !editing);
   }
 
   function fillDefaultForms() {
     clearForm($("#transactionForm"));
+    clearForm($("#debtForm"));
     clearForm($("#cdbForm"));
   }
 
@@ -558,15 +703,32 @@
     showToast("Conta adicionada.");
   }
 
+  async function handleDebtSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const record = { id: form.dataset.editId || uid("debt"), name: data.name.trim(), creditor: data.creditor?.trim() || "", balance: toAmount(data.balance), installment: toAmount(data.installment), dueDay: data.dueDay ? Number(data.dueDay) : null, accountId: data.accountId || "", active: data.active === "on" };
+    const existingIndex = vault.debts.findIndex((item) => item.id === form.dataset.editId);
+    if (existingIndex >= 0) vault.debts[existingIndex] = { ...vault.debts[existingIndex], ...record };
+    else vault.debts.push(record);
+    await saveCurrentVault();
+    clearForm(form);
+    renderAll();
+    showToast(existingIndex >= 0 ? "Dívida atualizada." : "Dívida cadastrada.");
+  }
+
   async function handleFixedSubmit(event) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
-    vault.fixedCosts.push({ id: uid("fixed"), name: data.name.trim(), category: data.category, amount: toAmount(data.amount), dueDay: Number(data.dueDay), accountId: data.accountId || "", active: data.active === "on" });
+    const record = { id: form.dataset.editId || uid("fixed"), name: data.name.trim(), category: data.category, amount: toAmount(data.amount), dueDay: Number(data.dueDay), accountId: data.accountId || "", active: data.active === "on" };
+    const existingIndex = vault.fixedCosts.findIndex((item) => item.id === form.dataset.editId);
+    if (existingIndex >= 0) vault.fixedCosts[existingIndex] = { ...vault.fixedCosts[existingIndex], ...record };
+    else vault.fixedCosts.push(record);
     await saveCurrentVault();
     clearForm(form);
     renderAll();
-    showToast("Custo fixo salvo.");
+    showToast(existingIndex >= 0 ? "Custo fixo atualizado." : "Custo fixo salvo.");
   }
 
   async function handleCdbSubmit(event) {
@@ -575,11 +737,70 @@
     const data = Object.fromEntries(new FormData(form).entries());
     const account = accountById(data.accountId);
     if (!account) { showToast("Cadastre e selecione a conta que guarda este CDB.", "error"); setView("contas"); return; }
-    vault.cdbs.push({ id: uid("cdb"), name: data.name.trim(), accountId: account.id, bank: account.name, principal: toAmount(data.principal), rate: toAmount(data.rate), rateType: data.rateType, startedAt: data.startedAt, maturityAt: data.maturityAt || "", liquidity: data.liquidity });
+    const record = { id: form.dataset.editId || uid("investment"), type: data.investmentType || "cdb", name: data.name.trim(), accountId: account.id, bank: account.name, principal: toAmount(data.principal), rate: toAmount(data.rate), rateType: data.rateType || "none", benchmarkRate: toAmount(data.benchmarkRate), startedAt: data.startedAt, maturityAt: data.maturityAt || "", liquidity: data.liquidity || "" };
+    const existingIndex = vault.investments.findIndex((item) => item.id === form.dataset.editId);
+    if (existingIndex >= 0) vault.investments[existingIndex] = { ...vault.investments[existingIndex], ...record };
+    else vault.investments.push(record);
     await saveCurrentVault();
     clearForm(form);
     renderAll();
-    showToast("CDB cadastrado.");
+    showToast(existingIndex >= 0 ? "Investimento atualizado." : "Investimento cadastrado.");
+  }
+
+  function editFixed(id) {
+    const item = vault.fixedCosts.find((fixed) => fixed.id === id);
+    if (!item) return;
+    setView("fixos");
+    const form = $("#fixedCostForm");
+    form.dataset.editId = item.id;
+    $("input[name='name']", form).value = item.name || "";
+    $("input[name='amount']", form).value = item.amount;
+    $("input[name='dueDay']", form).value = item.dueDay;
+    $("select[name='category']", form).value = item.category || "Outros";
+    $("select[name='accountId']", form).value = item.accountId || "";
+    $("input[name='active']", form).checked = item.active !== false;
+    setFormMode(form, "fixed", true);
+    form.closest(".form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    showToast("Edite os campos e salve novamente.");
+  }
+
+  function editDebt(id) {
+    const item = vault.debts.find((debt) => debt.id === id);
+    if (!item) return;
+    setView("dividas");
+    const form = $("#debtForm");
+    form.dataset.editId = item.id;
+    $("input[name='name']", form).value = item.name || "";
+    $("input[name='creditor']", form).value = item.creditor || "";
+    $("input[name='balance']", form).value = item.balance;
+    $("input[name='installment']", form).value = item.installment;
+    $("input[name='dueDay']", form).value = item.dueDay || "";
+    $("select[name='accountId']", form).value = item.accountId || "";
+    $("input[name='active']", form).checked = item.active !== false;
+    setFormMode(form, "debt", true);
+    form.closest(".form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    showToast("Edite os campos e salve novamente.");
+  }
+
+  function editInvestment(id) {
+    const item = vault.investments.find((investment) => investment.id === id);
+    if (!item) return;
+    setView("cdb");
+    const form = $("#cdbForm");
+    form.dataset.editId = item.id;
+    $("input[name='name']", form).value = item.name || "";
+    $("select[name='investmentType']", form).value = item.type || "cdb";
+    $("select[name='accountId']", form).value = item.accountId || "";
+    $("input[name='principal']", form).value = item.principal;
+    $("input[name='rate']", form).value = item.rate ?? "";
+    $("select[name='rateType']", form).value = normalizedRateType(item) || "none";
+    $("input[name='benchmarkRate']", form).value = item.benchmarkRate ?? item.cdiRate ?? "";
+    $("input[name='startedAt']", form).value = item.startedAt || todayIso();
+    $("input[name='maturityAt']", form).value = item.maturityAt || "";
+    $("select[name='liquidity']", form).value = item.liquidity || "Outro";
+    setFormMode(form, "investment", true);
+    form.closest(".form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    showToast("Edite os campos e salve novamente.");
   }
 
   async function handleSavingsSubmit(event) {
@@ -613,7 +834,7 @@
   }
 
   async function clearAllData() {
-    if (!window.confirm("Apagar todos os lançamentos, contas, custos fixos, CDBs e configurações de poupança deste usuário? Essa ação não pode ser desfeita.")) return;
+    if (!window.confirm("Apagar todos os lançamentos, contas, dívidas, custos fixos, investimentos e configurações de poupança deste usuário? Essa ação não pode ser desfeita.")) return;
     vault = blankVault(vault.profile.displayName);
     await saveCurrentVault();
     renderAll();
@@ -625,11 +846,12 @@
     if (!account) return;
     const references = [
       vault.transactions.some((item) => item.accountId === accountId),
+      vault.debts.some((item) => item.accountId === accountId),
       vault.fixedCosts.some((item) => item.accountId === accountId),
-      vault.cdbs.some((item) => item.accountId === accountId),
+      vault.investments.some((item) => item.accountId === accountId),
       vault.savings.some((item) => item.accountId === accountId)
     ];
-    if (references.some(Boolean)) { showToast("Não exclua uma conta que ainda está vinculada a lançamentos, custos, CDB ou poupança.", "error"); return; }
+    if (references.some(Boolean)) { showToast("Não exclua uma conta que ainda está vinculada a lançamentos, custos, investimentos, dívidas ou poupança.", "error"); return; }
     await deleteById("accounts", accountId, `Excluir a conta ${account.name}?`);
   }
 
@@ -642,6 +864,7 @@
     $("#transactionFilter").addEventListener("change", renderTransactions);
     $("#transactionForm").addEventListener("submit", handleTransactionSubmit);
     $("#accountForm").addEventListener("submit", handleAccountSubmit);
+    $("#debtForm").addEventListener("submit", handleDebtSubmit);
     $("#fixedCostForm").addEventListener("submit", handleFixedSubmit);
     $("#cdbForm").addEventListener("submit", handleCdbSubmit);
     $("#savingsForm").addEventListener("submit", handleSavingsSubmit);
@@ -657,8 +880,14 @@
       if (action === "delete-transaction") await deleteById("transactions", target.dataset.id, "Excluir este lançamento?");
       if (action === "edit-transaction") editTransaction(target.dataset.id);
       if (action === "delete-account") await deleteAccount(target.dataset.id);
+      if (action === "edit-debt") editDebt(target.dataset.id);
+      if (action === "delete-debt") await deleteById("debts", target.dataset.id, "Excluir esta dívida?");
+      if (action === "toggle-debt") { const item = vault.debts.find((debt) => debt.id === target.dataset.id); if (item) { item.active = item.active === false; await saveCurrentVault(); renderAll(); showToast(item.active ? "Dívida ativada." : "Dívida pausada."); } }
       if (action === "delete-fixed") await deleteById("fixedCosts", target.dataset.id, "Excluir este custo fixo?");
-      if (action === "delete-cdb") await deleteById("cdbs", target.dataset.id, "Excluir esta posição de CDB?");
+      if (action === "edit-fixed") editFixed(target.dataset.id);
+      if (action === "cancel-form") { clearForm(target.closest("form")); renderAll(); }
+      if (action === "edit-investment") editInvestment(target.dataset.id);
+      if (action === "delete-investment") await deleteById("investments", target.dataset.id, "Excluir este investimento?");
       if (action === "toggle-fixed") { const item = vault.fixedCosts.find((fixed) => fixed.id === target.dataset.id); if (item) { item.active = item.active === false; await saveCurrentVault(); renderAll(); showToast(item.active ? "Custo fixo ativado." : "Custo fixo pausado."); } }
     });
   }
@@ -670,7 +899,7 @@
     setupPeriodSelect();
     fillDefaultForms();
     const hashView = window.location.hash.replace("#", "");
-    if (VIEWS[hashView]) setView(hashView);
+    if (VIEWS[hashView] || hashView === "cdb") setView(hashView);
   }
 
   start();
