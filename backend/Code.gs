@@ -28,6 +28,7 @@ function doPost(event) {
     if (action === "register") return json_(register_(body));
     const identity = authenticate_(body);
     if (action === "login") return json_(login_(identity));
+    if (action === "change-password") return json_(changePassword_(identity, body.payload && body.payload.newPassword || body.newPassword));
     if (action === "get") return json_(getVault_(identity));
     if (action === "sync") return json_(saveVault_(identity, body.payload, body.baseRevision));
     return json_({ ok: false, error: "Ação não reconhecida." }, 400);
@@ -57,7 +58,11 @@ function identity_(body) {
 }
 
 function password_(body) {
-  const password = String(body.password || "");
+  return validatePassword_(body.password);
+}
+
+function validatePassword_(value) {
+  const password = String(value || "");
   if (password.length < MIN_PASSWORD_LENGTH || password.length > MAX_PASSWORD_LENGTH) throw new Error("A senha deve ter entre 8 e 128 caracteres.");
   return password;
 }
@@ -164,6 +169,23 @@ function authenticate_(body) {
     throw new Error("Usuário ou senha inválidos.");
   }
   return { ...identity, displayName: match.user.displayName };
+}
+
+function changePassword_(identity, newPasswordValue) {
+  const newPassword = validatePassword_(newPasswordValue);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const match = findUser_(identity);
+    if (!match || match.user.status !== "active") throw new Error("Usuário não encontrado ou inativo.");
+    const salt = Utilities.getUuid();
+    const now = new Date().toISOString();
+    const sheet = usersSheet_();
+    sheet.getRange(match.rowNumber, 4, 1, 4).setValues([[salt, passwordVerifier_(salt, newPassword), match.user.createdAt, now]]);
+    return { ok: true, username: identity.username, passwordChangedAt: now };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function login_(identity) {

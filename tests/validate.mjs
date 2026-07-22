@@ -21,9 +21,9 @@ function assertAny(source, patterns, message) {
   if (!patterns.some((pattern) => pattern.test(source))) featureFailures.push(message);
 }
 
-for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "dividas", "fixos", "cdb", "investimentos", "patrimonio", "analises", "configuracoes", "dashboardWealthMetrics", "analysisInvestments", "analysisPatrimony", "patrimonyForm"]) assert.match(html, new RegExp(marker), `seção ausente: ${marker}`);
+for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "dividas", "fixos", "cdb", "investimentos", "patrimonio", "analises", "configuracoes", "dashboardWealthMetrics", "analysisInvestments", "analysisPatrimony", "patrimonyForm", "passwordForm", "export-ai-report"]) assert.match(html, new RegExp(marker), `seção ausente: ${marker}`);
 for (const marker of ["cdbAccount", "investmentType", "benchmarkRate", "cancel-form", "debtForm", "debtAccount", "debtMetrics", "debtTable", "savingsForm", "savingsAccount", "savingsSummary", "manualYield", "monthlyRate", "investmentOperationDialog", "investmentOperationForm", "investmentOperationAccount"]) assert.match(html, new RegExp(marker), `campo ausente: ${marker}`);
-for (const marker of ["saveCurrentVault", "normalizeVault", "renderAnalyses", "renderInvestments", "renderPatrimony", "renderDebts", "handleDebtSubmit", "handlePatrimonySubmit", "editDebt", "editPatrimony", "totalDebt", "totalPatrimony", "remoteAccountId", "AbortController", "baseRevision", "openRemoteAccount", "register", "login", "savings", "debts", "investments", "patrimony", "accountId", "handleSavingsSubmit", "investmentProjection", "benchmarkRate", "totalInvested", "totalInvestmentValue", "investmentYield", "investmentCurrentValue", "investmentHasHistory", "handleInvestmentOperationSubmit", "open-investment-operation", "operations", "investmentOperationId", "investmentOperationAccount", "balanceAfter", "editInvestment", "editFixed", "monthlyRate", "manualYield", "deleteAccount", "deleteInvestment", "conta que ainda está vinculada"]) assert.match(js, new RegExp(marker), `regra ausente: ${marker}`);
+for (const marker of ["saveCurrentVault", "normalizeVault", "renderAnalyses", "renderInvestments", "renderPatrimony", "renderDebts", "handleDebtSubmit", "handlePatrimonySubmit", "editDebt", "editPatrimony", "totalDebt", "totalPatrimony", "remoteAccountId", "AbortController", "baseRevision", "openRemoteAccount", "changeRemotePassword", "handlePasswordSubmit", "buildAiReport", "exportAiReport", "operationalTransactions", "investmentTransactions", "investmentOperationType", "register", "login", "savings", "debts", "investments", "patrimony", "accountId", "handleSavingsSubmit", "investmentProjection", "benchmarkRate", "totalInvested", "totalInvestmentValue", "investmentYield", "investmentCurrentValue", "investmentHasHistory", "handleInvestmentOperationSubmit", "open-investment-operation", "operations", "investmentOperationId", "investmentOperationAccount", "balanceAfter", "editInvestment", "editFixed", "monthlyRate", "manualYield", "deleteAccount", "deleteInvestment", "conta que ainda está vinculada"]) assert.match(js, new RegExp(marker), `regra ausente: ${marker}`);
 assert.match(js, /minimumFractionDigits:\s*2/, "a moeda precisa sempre exibir duas casas decimais");
 assert.match(js, /function formatMoneyInput/, "a máscara de moeda precisa existir");
 assert.match(js, /function setupMoneyInputs/, "os campos monetários precisam ser configurados");
@@ -32,7 +32,7 @@ assert.match(js, /#investmentOperationAmount/, "a operação de investimento pre
 assert.doesNotMatch(js, /R\$ .*mil|R\$ .* mi/, "a exibição não deve abreviar valores em mil ou milhões");
 assert.match(html, /R\$ 4\.820,00/, "os valores demonstrativos também precisam ter duas casas");
 for (const marker of ["debts", "investments", "patrimony", "validatePatrimony_", "validateInvestmentOperations_", "investmentByOperation", "transactionCount", "operations"]) assert.match(backend, new RegExp(marker), `coleção ausente no backend: ${marker}`);
-for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "passwordVerifier_", "SPREADSHEET_ID", "accountId", "VaultJournal", "LockService", "checksum_", "savings"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
+for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "changePassword_", "change-password", "passwordVerifier_", "SPREADSHEET_ID", "accountId", "VaultJournal", "LockService", "checksum_", "savings"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
 
 // Transferências são uma operação pareada: a conta de origem recebe a saída,
 // a conta de destino recebe a entrada e o restante do sistema pode identificá-las.
@@ -96,4 +96,8 @@ assert.doesNotMatch(js, /backupWarning|snapshots? automáticos?|snapshot[^\n]*(?
 assert.doesNotMatch(js, /prefixPositions|PARTICIPAÇÃO EM CDB/i, "as análises não devem ficar limitadas ao CDB prefixado");
 assert.doesNotMatch(html, /Enaex|enaex/i, "a marca de referência não deve aparecer na interface");
 assert.doesNotMatch(js, /password\s*[:=]\s*["'][^"']+["']/i, "não deve haver senha fixa no código");
+assert.match(js, /text\/plain;charset=utf-8/, "o relatório precisa ser exportado como TXT UTF-8");
+for (const marker of ["RESUMO EXECUTIVO", "PADRÕES E INSIGHTS DERIVADOS", "EVOLUÇÃO MENSAL", "LANÇAMENTOS DETALHADOS", "DADOS BRUTOS EM JSON", "PERGUNTAS PARA A IA INVESTIGAR"]) assert.match(js, new RegExp(marker), `seção ausente no relatório IA: ${marker}`);
+assert.match(readme, /Troca de senha/i, "o README precisa documentar a troca de senha");
+assert.match(readme, /relatório financeiro avançado em TXT/i, "o README precisa documentar o relatório para IA");
 console.log(`validate: ${required.length} arquivos e contratos principais OK`);

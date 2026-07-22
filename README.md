@@ -5,6 +5,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 ## Recursos
 
 - cadastro e login online com usuário e senha;
+- troca de senha autenticada pelas configurações, sem salvar a senha no navegador;
 - planilha Google como fonte oficial dos dados;
 - histórico append-only na própria planilha, com revisões anteriores preservadas;
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
@@ -20,6 +21,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - módulo de patrimônio para informar o valor atual de casa, carro, terra e outros bens, separado das contas e dos investimentos;
 - projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
 - análises mensais, categorias, composição patrimonial e taxa de sobra;
+- relatório financeiro avançado em TXT UTF-8, com dados brutos, métricas, padrões, alertas e perguntas prontas para uma IA;
 - workflow de GitHub Pages.
 
 As categorias de lançamentos não usam mais a opção genérica “Outros”. Quando um lançamento antigo ainda contém esse valor, ele é exibido e salvo como “Categoria não disponível no sistema”, para deixar claro que a descrição precisa ser conferida sem apagar o registro.
@@ -29,6 +31,14 @@ As categorias de lançamentos não usam mais a opção genérica “Outros”. Q
 O GitHub Pages hospeda apenas a interface pública. O Apps Script é o backend e grava tudo em uma única planilha online, nas abas Users, VaultCurrent e VaultJournal. O histórico append-only preserva as revisões anteriores sem criar arquivos auxiliares no Drive.
 
 O navegador não usa localStorage, sessionStorage, IndexedDB, cache de cofre ou modo offline. A sessão e os dados ficam somente na memória enquanto a página está aberta; depois de sair ou recarregar, é necessário entrar novamente. Se a planilha estiver indisponível, o aplicativo falha fechado e não confirma a alteração.
+
+## Troca de senha
+
+Em `Configurações`, use o cartão `Trocar senha`. O Apps Script confere a senha atual, gera novo salt e verificador e atualiza somente o cadastro correspondente na aba `Users`. A senha antiga não é exibida nem armazenada em texto puro; depois da troca, a sessão em memória passa a usar a nova senha para as próximas sincronizações.
+
+## Relatório para IA
+
+Na tela `Análises`, `Exportar relatório TXT` baixa um arquivo UTF-8 com contexto e cobertura, resumo executivo, evolução mensal, categorias, liquidez por conta, custos fixos, dívidas, investimentos, patrimônio, transferências, poupança, lançamentos detalhados, alertas derivados, perguntas de investigação e o cofre em JSON no final. O relatório não consulta cotações externas nem inventa valores: deixa explícitas as limitações e diferencia fatos registrados de interpretações sugeridas.
 
 ## Configuração
 

@@ -241,6 +241,13 @@
     return { online: true, recovered: Boolean(result.recovered) };
   }
 
+  async function changeRemotePassword(currentPassword, newPassword) {
+    if (!session) throw new Error("Sua sessão expirou. Entre novamente para trocar a senha.");
+    const result = await remoteRequest("change-password", { ...session, password: currentPassword }, { newPassword });
+    session.password = newPassword;
+    return result;
+  }
+
   async function saveCurrentVault() {
     if (!vault || !session) return;
     syncLegacyCdbs();
@@ -714,6 +721,204 @@
     $("#analysisTable").innerHTML = `<table class="data-table"><thead><tr><th>MÊS</th><th>ENTRADAS</th><th>SAÍDAS</th><th>RESULTADO</th><th>TAXA DE SOBRA</th></tr></thead><tbody>${months.map((item) => `<tr><td><strong>${monthLabel(item.period)}</strong></td><td class="number positive-number">${formatCurrency(item.income)}</td><td class="number negative-number">${formatCurrency(item.expense)}</td><td class="number ${item.result >= 0 ? "positive-number" : "negative-number"}">${formatCurrency(item.result)}</td><td class="number">${item.income ? `${Math.round(item.rate)}%` : "—"}</td></tr>`).join("")}</tbody></table>`;
   }
 
+  function reportText(value) {
+    const text = String(value ?? "").replace(/\r?\n/g, " ").trim();
+    return text || "não informado";
+  }
+
+  function reportMoney(value) {
+    return formatCurrency(toAmount(value));
+  }
+
+  function reportPercent(value) {
+    return `${Number.isFinite(Number(value)) ? Number(value).toFixed(1).replace(".", ",") : "0,0"}%`;
+  }
+
+  function reportDateRange(items, field = "date") {
+    const dates = items.map((item) => String(item?.[field] || "")).filter(Boolean).sort();
+    return dates.length ? `${formatDate(dates[0])} até ${formatDate(dates[dates.length - 1])}` : "não informado";
+  }
+
+  function investmentOperationType(transaction) {
+    const operation = vault.investments.flatMap((item) => Array.isArray(item.operations) ? item.operations : []).find((item) => item.id === transaction.investmentOperationId);
+    return operation?.type || (transaction.type === "entrada" ? "resgate" : "aporte");
+  }
+
+  function buildAiReport() {
+    const lines = [];
+    const add = (line = "") => lines.push(line);
+    const heading = (title) => { add(""); add(`## ${title}`); };
+    const addKeyValue = (key, value) => add(`${key}: ${reportText(value)}`);
+    const transactions = vault.transactions.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    const financialTransactions = transactions.filter((item) => !item.transferId);
+    const investmentTransactions = financialTransactions.filter((item) => item.investmentOperationId);
+    const operationalTransactions = financialTransactions.filter((item) => !item.investmentOperationId);
+    const incomes = operationalTransactions.filter((item) => item.type === "entrada");
+    const expenses = operationalTransactions.filter((item) => item.type === "saida");
+    const incomeTotal = incomes.reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const expenseTotal = expenses.reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const resultTotal = incomeTotal - expenseTotal;
+    const months = getMonthlySummary(13);
+    const reportMonths = months.map((month) => {
+      const items = operationalTransactions.filter((item) => String(item.date || "").startsWith(month.period));
+      const investmentItems = investmentTransactions.filter((item) => String(item.date || "").startsWith(month.period));
+      const transfers = vault.transfers.filter((item) => String(item.date || "").startsWith(month.period));
+      const income = items.filter((item) => item.type === "entrada").reduce((sum, item) => sum + toAmount(item.amount), 0);
+      const expense = items.filter((item) => item.type === "saida").reduce((sum, item) => sum + toAmount(item.amount), 0);
+      const aportes = investmentItems.filter((item) => investmentOperationType(item) === "aporte").reduce((sum, item) => sum + toAmount(item.amount), 0);
+      const resgates = investmentItems.filter((item) => investmentOperationType(item) === "resgate").reduce((sum, item) => sum + toAmount(item.amount), 0);
+      return { ...month, income, expense, aportes, resgates, transfers: transfers.reduce((sum, item) => sum + toAmount(item.amount), 0), result: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
+    });
+    const monthsWithIncome = reportMonths.filter((item) => item.income > 0);
+    const positiveMonths = reportMonths.filter((item) => item.result > 0).length;
+    const negativeMonths = reportMonths.filter((item) => item.result < 0).length;
+    const categoryTotals = expenses.reduce((map, item) => {
+      const key = item.category || UNAVAILABLE_CATEGORY;
+      map[key] = (map[key] || 0) + toAmount(item.amount);
+      return map;
+    }, {});
+    const rankedCategories = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+    const topExpense = expenses.slice().sort((a, b) => toAmount(b.amount) - toAmount(a.amount))[0];
+    const accountAssets = totalBalance() + totalInvestmentValue() + totalPatrimony();
+    const netWorth = accountAssets - totalDebt();
+    const activeFixed = vault.fixedCosts.filter((item) => item.active !== false);
+    const currentAgenda = fixedCostStats(currentPeriod());
+    const recurringExpenseTotal = activeFixed.reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const currentMonth = reportMonths[reportMonths.length - 1];
+    const rawData = normalizeVault(vault);
+
+    add("RELATÓRIO FINANCEIRO AVANÇADO PARA ANÁLISE POR IA");
+    add("Formato: TXT UTF-8 | Fonte: dados informados pelo usuário no aplicativo");
+    add(`Gerado em: ${new Date().toISOString()}`);
+    add("Instrução para a IA: trate valores calculados como derivados dos dados abaixo, não invente informações ausentes, sinalize incertezas e separe fatos, hipóteses e recomendações.");
+
+    heading("1. CONTEXTO E COBERTURA");
+    addKeyValue("Perfil", vault.profile.displayName || session?.username || "não informado");
+    addKeyValue("Período dos lançamentos", reportDateRange(transactions));
+    addKeyValue("Quantidade de lançamentos", transactions.length);
+    addKeyValue("Quantidade de transferências internas", vault.transfers.length);
+    addKeyValue("Quantidade de contas", vault.accounts.length);
+    addKeyValue("Quantidade de investimentos", vault.investments.length);
+    addKeyValue("Quantidade de dívidas", vault.debts.filter((item) => item.active !== false).length);
+    addKeyValue("Quantidade de custos fixos ativos", activeFixed.length);
+    addKeyValue("Qualidade dos lançamentos", `${transactions.filter((item) => item.date && item.description && toAmount(item.amount) > 0).length} com data, descrição e valor positivo de ${transactions.length}`);
+    add("Limitações: saldo de conta parte do saldo inicial informado e aplica os lançamentos registrados; investimentos e patrimônio usam os valores declarados; não há cotação automática, imposto calculado ou confirmação externa de valores.");
+
+    heading("2. RESUMO EXECUTIVO");
+    addKeyValue("Entradas operacionais acumuladas", reportMoney(incomeTotal));
+    addKeyValue("Saídas operacionais acumuladas", reportMoney(expenseTotal));
+    addKeyValue("Resultado operacional acumulado", reportMoney(resultTotal));
+    addKeyValue("Aportes em investimentos", reportMoney(reportMonths.reduce((sum, item) => sum + item.aportes, 0)));
+    addKeyValue("Resgates de investimentos", reportMoney(reportMonths.reduce((sum, item) => sum + item.resgates, 0)));
+    addKeyValue("Transferências internas", reportMoney(vault.transfers.reduce((sum, item) => sum + toAmount(item.amount), 0)));
+    addKeyValue("Saldo calculado nas contas", reportMoney(totalBalance()));
+    addKeyValue("Valor atual dos investimentos", reportMoney(totalInvestmentValue()));
+    addKeyValue("Patrimônio declarado", reportMoney(totalPatrimony()));
+    addKeyValue("Dívidas ativas", reportMoney(totalDebt()));
+    addKeyValue("Patrimônio líquido estimado", reportMoney(netWorth));
+    addKeyValue("Compromissos fixos ativos por mês", reportMoney(recurringExpenseTotal));
+    addKeyValue("Taxa de sobra no período selecionado", currentMonth.income ? reportPercent(currentMonth.rate) : "sem entradas informadas");
+
+    heading("3. PADRÕES E INSIGHTS DERIVADOS");
+    add(`- Nos últimos ${months.length} meses exibidos: ${positiveMonths} mês(es) com resultado positivo, ${negativeMonths} negativo(s) e ${months.length - positiveMonths - negativeMonths} sem resultado financeiro.`);
+    if (monthsWithIncome.length) {
+      const averageIncome = monthsWithIncome.reduce((sum, item) => sum + item.income, 0) / monthsWithIncome.length;
+      const averageExpense = monthsWithIncome.reduce((sum, item) => sum + item.expense, 0) / monthsWithIncome.length;
+      add(`- Média mensal entre meses com entrada: ${reportMoney(averageIncome)} de entradas e ${reportMoney(averageExpense)} de saídas.`);
+    } else add("- Não há entradas registradas na janela analisada; não é possível estimar renda média ou taxa de sobra.");
+    if (rankedCategories.length) {
+      const [category, amount] = rankedCategories[0];
+      const share = expenseTotal ? amount / expenseTotal * 100 : 0;
+      add(`- Maior categoria de saída: ${reportText(category)}, ${reportMoney(amount)} (${reportPercent(share)} das saídas).`);
+      if (share >= 40) add("- Concentração relevante: a maior categoria representa pelo menos 40% das saídas; investigar recorrência, necessidade e possibilidade de substituição.");
+    }
+    if (topExpense) add(`- Maior lançamento de saída: ${reportText(topExpense.description)} em ${formatDate(topExpense.date)}, ${reportMoney(topExpense.amount)} (${reportText(topExpense.category)}).`);
+    if (totalDebt() > accountAssets) add("- Alerta patrimonial: as dívidas ativas superam os ativos calculados; priorizar uma visão de liquidez e vencimentos.");
+    if (currentAgenda.pending > 0) add(`- Agenda do período selecionado: ${reportMoney(currentAgenda.pending)} em custos fixos ainda não marcados como pagos.`);
+    if (expenseTotal > incomeTotal && incomes.length) add("- Alerta de fluxo: as saídas acumuladas superam as entradas acumuladas nos lançamentos registrados.");
+    if (!transactions.length) add("- Não há lançamentos; qualquer recomendação deve começar por organizar a coleta de entradas, saídas e datas.");
+    add("- Esses insights são alertas exploratórios, não diagnóstico financeiro; a IA deve pedir confirmação quando houver contexto ausente.");
+
+    heading("4. EVOLUÇÃO MENSAL");
+    add("mês | entradas_operacionais | saídas_operacionais | aportes | resgates | transferências | resultado_operacional | taxa_de_sobra");
+    reportMonths.forEach((item) => add(`${item.period} | ${reportMoney(item.income)} | ${reportMoney(item.expense)} | ${reportMoney(item.aportes)} | ${reportMoney(item.resgates)} | ${reportMoney(item.transfers)} | ${reportMoney(item.result)} | ${item.income ? reportPercent(item.rate) : "não informado"}`));
+
+    heading("5. SAÍDAS POR CATEGORIA");
+    add("categoria | total | participação nas saídas | quantidade de lançamentos");
+    rankedCategories.forEach(([category, amount]) => {
+      const count = expenses.filter((item) => (item.category || UNAVAILABLE_CATEGORY) === category).length;
+      add(`${reportText(category)} | ${reportMoney(amount)} | ${reportPercent(expenseTotal ? amount / expenseTotal * 100 : 0)} | ${count}`);
+    });
+    if (!rankedCategories.length) add("não informado");
+
+    heading("6. CONTAS E LIQUIDEZ");
+    add("conta | tipo | saldo inicial informado | saldo calculado | quantidade de movimentos");
+    vault.accounts.forEach((account) => add(`${reportText(account.name)} | ${account.type === "poupanca" ? "poupança" : "conta corrente"} | ${reportMoney(account.balance)} | ${reportMoney(accountBalance(account.id))} | ${vault.transactions.filter((item) => item.accountId === account.id).length}`));
+    if (!vault.accounts.length) add("não informado");
+
+    heading("7. CUSTOS FIXOS E AGENDA");
+    add("custo | categoria | valor mensal | vencimento | conta | ativo");
+    activeFixed.forEach((item) => add(`${reportText(item.name)} | ${reportText(item.category)} | ${reportMoney(item.amount)} | dia ${reportText(item.dueDay)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | sim`));
+    add(`Agenda de ${currentPeriod()}: previsto ${reportMoney(currentAgenda.total)} | marcado como pago ${reportMoney(currentAgenda.paid)} | a pagar ${reportMoney(currentAgenda.pending)}`);
+    if (!activeFixed.length) add("não informado");
+
+    heading("8. DÍVIDAS");
+    add("dívida | saldo | parcela | vencimento | conta | status | observação");
+    vault.debts.filter((item) => item.active !== false).forEach((item) => add(`${reportText(item.name)} | ${reportMoney(item.balance)} | ${reportMoney(item.installment)} | dia ${reportText(item.dueDay)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ativa | ${reportText(item.notes)}`));
+    if (!vault.debts.filter((item) => item.active !== false).length) add("não informado");
+
+    heading("9. INVESTIMENTOS");
+    add("investimento | tipo | capital | rendimento informado | valor atual | taxa | vencimento | histórico");
+    vault.investments.forEach((item) => add(`${reportText(item.name)} | ${reportText(investmentTypeLabel(item.type))} | ${reportMoney(item.principal)} | ${reportMoney(investmentYield(item))} | ${reportMoney(investmentCurrentValue(item))} | ${reportText(item.rate)} ${reportText(item.rateType)} | ${reportText(item.dueDate)} | ${item.operations?.length || 0} operação(ões)`));
+    if (!vault.investments.length) add("não informado");
+
+    heading("10. PATRIMÔNIO DECLARADO");
+    add("bem | tipo | valor atual | data de referência | observação");
+    vault.patrimony.filter((item) => item.active !== false).forEach((item) => add(`${reportText(item.name)} | ${reportText(patrimonyTypeLabel(item.type))} | ${reportMoney(item.currentValue)} | ${formatDate(item.referenceDate)} | ${reportText(item.notes)}`));
+    if (!vault.patrimony.filter((item) => item.active !== false).length) add("não informado");
+
+    heading("11. TRANSFERÊNCIAS INTERNAS");
+    add("data | origem | destino | valor | observação");
+    vault.transfers.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).forEach((item) => add(`${formatDate(item.date)} | ${reportText(vault.accounts.find((account) => account.id === (item.sourceAccountId || item.fromAccountId))?.name)} | ${reportText(vault.accounts.find((account) => account.id === (item.destinationAccountId || item.toAccountId))?.name)} | ${reportMoney(item.amount)} | ${reportText(item.notes)}`));
+    if (!vault.transfers.length) add("não informado");
+
+    heading("12. POUPANÇA");
+    add("conta | taxa mensal informada | rendimento manual | data de referência | observação");
+    vault.savings.forEach((item) => add(`${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ${reportText(item.monthlyRate)}% | ${item.manualYield === null || item.manualYield === undefined ? "estimado pelo sistema" : reportMoney(item.manualYield)} | ${formatDate(item.referenceDate)} | ${reportText(item.correctionNote)}`));
+    if (!vault.savings.length) add("não informado");
+
+    heading("13. LANÇAMENTOS DETALHADOS");
+    add("id | data | tipo | categoria | descrição | valor | conta | transferência | investimento/operação | recorrente | observação");
+    transactions.forEach((item) => add(`${reportText(item.id)} | ${formatDate(item.date)} | ${reportText(item.type)} | ${reportText(item.category)} | ${reportText(item.description)} | ${reportMoney(item.amount)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ${reportText(item.transferId)} | ${reportText(item.investmentId || item.investmentOperationId)} | ${item.recurring ? "sim" : "não"} | ${reportText(item.notes)}`));
+    if (!transactions.length) add("não informado");
+
+    heading("14. PERGUNTAS PARA A IA INVESTIGAR");
+    add("1. Quais categorias concentram as maiores saídas e quais têm comportamento recorrente, sazonal ou pontual?");
+    add("2. O fluxo de caixa suporta os custos fixos e parcelas atuais? Em quais meses há maior risco de aperto?");
+    add("3. Quais lançamentos parecem duplicados, fora do padrão ou sem contexto suficiente para uma decisão?");
+    add("4. Como o patrimônio líquido e a liquidez evoluem quando separam contas, investimentos, patrimônio e dívidas?");
+    add("5. Quais três ações de baixo risco e alto impacto podem melhorar o próximo mês, deixando claro o dado que sustenta cada uma?");
+
+    heading("15. DADOS BRUTOS EM JSON");
+    add(JSON.stringify(rawData, null, 2));
+    return `${lines.join("\n").trim()}\n`;
+  }
+
+  function exportAiReport() {
+    if (!vault) { showToast("Entre no painel para exportar seu relatório.", "error"); return; }
+    const content = buildAiReport();
+    const blob = new Blob(["\uFEFF", content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `relatorio-financeiro-ia-${todayIso()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    showToast("Relatório TXT avançado exportado.");
+  }
+
   function renderInvestmentAnalysis() {
     const total = totalInvested();
     const grouped = Object.entries(vault.investments.reduce((map, item) => {
@@ -857,6 +1062,25 @@
       }
     } catch (error) {
       setAuthNotice(error.message || "Não foi possível concluir.");
+    }
+  }
+
+  async function handlePasswordSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (data.newPassword !== data.newPasswordConfirm) { showToast("As novas senhas não conferem.", "error"); return; }
+    if (data.newPassword.length < 8) { showToast("A nova senha precisa ter pelo menos 8 caracteres.", "error"); return; }
+    const submit = $("button[type='submit']", form);
+    submit.disabled = true;
+    try {
+      await changeRemotePassword(data.currentPassword, data.newPassword);
+      form.reset();
+      showToast("Senha atualizada com segurança.");
+    } catch (error) {
+      showToast(error.message || "Não foi possível atualizar a senha.", "error");
+    } finally {
+      submit.disabled = false;
     }
   }
 
@@ -1272,6 +1496,7 @@
 
   function bindEvents() {
     $("#authForm").addEventListener("submit", handleAuthSubmit);
+    $("#passwordForm").addEventListener("submit", handlePasswordSubmit);
     $("#authModeToggle").addEventListener("click", () => setAuthMode(authMode === "login" ? "signup" : "login"));
     $("#logoutButton").addEventListener("click", leaveApp);
     $("#menuButton").addEventListener("click", () => $("#sidebar").classList.toggle("is-open"));
@@ -1297,6 +1522,7 @@
       if (target.dataset.viewTarget || target.dataset.viewLink) { setView(target.dataset.viewTarget || target.dataset.viewLink); return; }
       const action = target.dataset.action;
       if (action === "open-transaction") { setView("lancamentos"); window.setTimeout(() => $("#transactionFormPanel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); }
+      if (action === "export-ai-report") exportAiReport();
       if (action === "clear-all") await clearAllData();
       if (action === "delete-transaction") await deleteById("transactions", target.dataset.id, "Excluir este lançamento?");
       if (action === "delete-transfer") await deleteTransfer(target.dataset.id);

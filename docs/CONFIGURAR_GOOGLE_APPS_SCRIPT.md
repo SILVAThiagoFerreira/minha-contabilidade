@@ -47,6 +47,8 @@ O JSON de cada usuário mantém as coleções `accounts`, `transactions`, `fixed
 
 O frontend calcula o identificador do usuário para localizar o cadastro, mas o backend confirma o mesmo hash, procura o usuário na aba Users e verifica a senha com salt. O backend não aceita get ou sync sem uma senha válida. A senha é enviada apenas pela conexão HTTPS do Web App e nunca é gravada em texto puro; a planilha guarda apenas o salt e o verificador.
 
+Para trocar a senha, a interface envia a senha atual na ação autenticada `change-password` e a nova senha no payload. O backend confere a senha atual antes de gerar outro salt e verificador, atualiza o registro correspondente em `Users` e não altera o cofre financeiro. A nova senha passa a ser usada pela sessão enquanto a página permanecer aberta.
+
 O payload de cada usuário fica em uma célula JSON com limite operacional de 45.000 caracteres. O backend valida as coleções antes de gravar e usa checksum SHA-256 para detectar corrupção.
 
 ## 5. Recuperação e cópias
@@ -68,3 +70,5 @@ Se VaultCurrent precisar ser recuperado, o backend usa a última revisão válid
 - Em falha de rede ou indisponibilidade do Apps Script, a alteração não é apresentada como salva.
 - Não coloque a URL completa da planilha ou dados financeiros no repositório.
 - O JSON fornecido para referência não é importado nem alterado pelo aplicativo.
+- Em `Configurações`, o usuário pode trocar a senha sem sair da conta; se a senha atual estiver errada, nenhum dado é alterado.
+- Em `Análises`, o botão `Exportar relatório TXT` gera um relatório local para enviar a uma IA. O arquivo inclui dados registrados e cálculos derivados, mas não contém senha, salt, verificador ou `accountId` da autenticação.
