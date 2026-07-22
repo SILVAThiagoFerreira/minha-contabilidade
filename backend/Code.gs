@@ -183,6 +183,7 @@ function blankVault_(displayName) {
     fixedCostPayments: [],
     cdbs: [],
     investments: [],
+    patrimony: [],
     savings: [],
     updatedAt: new Date().toISOString()
   };
@@ -190,16 +191,26 @@ function blankVault_(displayName) {
 
 function jsonPayload_(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Dados do usuário ausentes ou inválidos.");
-  ["accounts", "debts", "transactions", "fixedCosts", "transfers", "fixedCostPayments", "cdbs", "investments", "savings"].forEach((name) => {
+  ["accounts", "debts", "transactions", "fixedCosts", "transfers", "fixedCostPayments", "cdbs", "investments", "patrimony", "savings"].forEach((name) => {
     if (payload[name] !== undefined && !Array.isArray(payload[name])) throw new Error("Estrutura inválida em " + name + ".");
     if (Array.isArray(payload[name]) && payload[name].length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de registros excedida em " + name + ".");
   });
   validateInvestmentOperations_(payload.investments || [], payload.transactions || []);
   validateTransfers_(payload.transfers || [], payload.transactions || [], payload.accounts || []);
   validateFixedCostPayments_(payload.fixedCostPayments || [], payload.fixedCosts || []);
+  validatePatrimony_(payload.patrimony || []);
   const text = JSON.stringify(payload);
   if (text.length > MAX_PAYLOAD_CHARS) throw new Error("O cofre ultrapassou o limite seguro da planilha.");
   return text;
+}
+
+function validatePatrimony_(items) {
+  (items || []).forEach((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Bem patrimonial inválido.");
+    if (!String(item.name || "").trim()) throw new Error("Cada bem patrimonial precisa ter um nome.");
+    const value = Number(item.currentValue);
+    if (!isFinite(value) || value < 0) throw new Error("O valor do bem patrimonial precisa ser maior ou igual a zero.");
+  });
 }
 
 /**

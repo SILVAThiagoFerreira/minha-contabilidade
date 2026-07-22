@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#1e2d38" />
-    <meta name="description" content="Painel pessoal para organizar caixa, contas, custos fixos e investimentos." />
+    <meta name="description" content="Painel pessoal para organizar caixa, contas, patrimônio, custos fixos e investimentos." />
     <title>Minha contabilidade</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -74,6 +74,7 @@
           <button class="nav-item" data-view-target="dividas"><span class="nav-icon">−</span><span>Dívidas</span></button>
           <button class="nav-item" data-view-target="fixos"><span class="nav-icon">◷</span><span>Custos fixos</span></button>
           <button class="nav-item" data-view-target="cdb"><span class="nav-icon">◒</span><span>Investimentos</span></button>
+          <button class="nav-item" data-view-target="patrimonio"><span class="nav-icon">◇</span><span>Patrimônio</span></button>
           <button class="nav-item" data-view-target="analises"><span class="nav-icon">▥</span><span>Análises</span></button>
         </nav>
         <div class="sidebar-bottom">
@@ -185,7 +186,15 @@
             <div id="analysisHighlights" class="analysis-highlights"></div>
             <div class="analysis-grid"><article class="panel panel--wide"><div class="panel-heading"><div><p class="eyebrow">SÉRIE HISTÓRICA</p><h3>Resultado mensal</h3></div></div><div id="analysisBars" class="analysis-bars"></div></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PESO NO MÊS</p><h3>Custos por categoria</h3></div></div><div id="analysisCategories" class="analysis-categories"></div></article></div>
             <article class="panel"><div class="panel-heading"><div><p class="eyebrow">ALOCAÇÃO</p><h3>Investimentos por tipo</h3></div></div><div id="analysisInvestments" class="data-table-wrap"></div></article>
+            <article class="panel"><div class="panel-heading"><div><p class="eyebrow">COMPOSIÇÃO</p><h3>Bens por categoria</h3></div></div><div id="analysisPatrimony" class="data-table-wrap"></div></article>
             <article class="panel"><div class="panel-heading"><div><p class="eyebrow">COMPARAÇÃO</p><h3>Últimos meses</h3></div></div><div id="analysisTable" class="data-table-wrap"></div></article>
+          </section>
+
+          <section class="view" data-view="patrimonio">
+            <div class="view-intro"><div><p class="eyebrow">PATRIMÔNIO FORA DO CAIXA</p><h1>Patrimônio</h1><p class="view-lede">Cadastre o valor atual de casa, carro, terra e outros bens sem transformar esses itens em contas ou lançamentos.</p></div></div>
+            <div id="patrimonyMetrics" class="metric-grid metric-grid--three"></div>
+            <div class="section-grid"><article class="panel form-panel"><div class="panel-heading"><div><p class="eyebrow">NOVO BEM</p><h3>Adicionar patrimônio</h3></div></div><form id="patrimonyForm" class="stack-form" novalidate><label class="field"><span>Nome do bem</span><input name="name" placeholder="ex.: Casa da família" required /></label><div class="field-row"><label class="field"><span>Tipo</span><select name="type"><option value="casa">Casa</option><option value="apartamento">Apartamento</option><option value="carro">Carro</option><option value="moto">Moto</option><option value="terra">Terra</option><option value="outro">Outro bem</option></select></label><label class="field"><span>Valor atual</span><input name="currentValue" type="number" min="0" step="0.01" placeholder="0,00" required /></label></div><label class="field"><span>Data de referência</span><input name="referenceDate" type="date" required /></label><label class="field"><span>Observação <small>(opcional)</small></span><textarea name="notes" rows="3" placeholder="ex.: avaliação aproximada, localização ou modelo"></textarea></label><p class="form-hint">Este valor é apenas patrimonial: não cria saldo, conta, investimento ou lançamento financeiro.</p><button class="button button--primary button--wide" type="submit">Salvar bem</button><button class="button button--secondary button--wide is-hidden" type="button" data-action="cancel-form">Cancelar edição</button></form></article><article class="panel panel--table"><div class="panel-heading"><div><p class="eyebrow">BENS CADASTRADOS</p><h3>Valor por item</h3><p class="panel-subtitle">Use o valor atual que você considera adequado. O sistema não inventa avaliação nem altera seus dados financeiros.</p></div></div><div id="patrimonyTable" class="data-table-wrap"></div></article></div>
+            <article class="panel cdb-note-panel"><span class="note-mark">i</span><div><h3>Como isso entra nas análises</h3><p>O patrimônio líquido soma contas, investimentos e bens declarados e desconta dívidas. Bens cadastrados aqui ficam separados do dinheiro disponível e não entram no fluxo mensal.</p></div></article>
           </section>
 
           <section class="view" data-view="configuracoes">

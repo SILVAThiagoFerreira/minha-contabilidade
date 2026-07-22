@@ -1,6 +1,6 @@
 # Minha contabilidade
 
-Painel online para organizar entradas, saídas, contas bancárias, custos fixos, dívidas e investimentos. A interface usa grafite, vermelho de destaque, divisores finos e cartões operacionais, sem logo de terceiros.
+Painel online para organizar entradas, saídas, contas bancárias, patrimônio declarado, custos fixos, dívidas e investimentos. A interface usa grafite, vermelho de destaque, divisores finos e cartões operacionais, sem logo de terceiros.
 
 ## Recursos
 
@@ -17,8 +17,9 @@ Painel online para organizar entradas, saídas, contas bancárias, custos fixos,
 - agenda mensal dos custos fixos, com referência de concluído e indicadores de total, pago e a pagar;
 - dívidas com saldo atual, parcela, vencimento, conta de pagamento e edição;
 - módulo de investimentos com CDB, Tesouro, fundos, ações, ETFs, LCI/LCA e outros;
+- módulo de patrimônio para informar o valor atual de casa, carro, terra e outros bens, separado das contas e dos investimentos;
 - projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
-- análises mensais, categorias e taxa de sobra;
+- análises mensais, categorias, composição patrimonial e taxa de sobra;
 - workflow de GitHub Pages.
 
 ## Arquitetura online
@@ -40,6 +41,12 @@ Ao cadastrar um investimento, a conta/banco é escolhida entre as contas existen
 ## Dívidas
 
 Dívidas ficam separadas dos custos fixos. O saldo atual entra no cálculo do patrimônio líquido, enquanto a parcela mensal aparece como compromisso. Uma dívida pode ser editada, pausada ou excluída, e a conta de pagamento é escolhida entre as contas cadastradas.
+
+## Patrimônio declarado
+
+O módulo “Patrimônio” guarda itens como casa, apartamento, carro, moto, terra ou outro bem em uma coleção própria do cofre online. Para cada item, informe o valor atual que deseja considerar, a data de referência e uma observação opcional. Esse cadastro não cria conta, saldo, lançamento, transferência ou investimento e não altera os dados financeiros existentes.
+
+O valor dos bens aparece no painel, nas análises e no cálculo do patrimônio líquido: saldo das contas + valor atual dos investimentos + patrimônio declarado − dívidas. O sistema usa somente os valores informados pelo usuário; não estima, consulta ou inventa avaliações de mercado.
 
 ## Transferências entre contas
 
