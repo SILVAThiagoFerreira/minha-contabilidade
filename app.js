@@ -744,6 +744,18 @@
     return operation?.type || (transaction.type === "entrada" ? "resgate" : "aporte");
   }
 
+  function reportMonthKeys(items) {
+    const keys = items.map((item) => String(item?.date || "").slice(0, 7)).filter((key) => /^\d{4}-(0[1-9]|1[0-2])$/.test(key)).sort();
+    if (!keys.length) return [currentPeriod()];
+    const start = keys[0].split("-").map(Number);
+    const end = keys[keys.length - 1].split("-").map(Number);
+    const startDate = new Date(start[0], start[1] - 1, 1, 12);
+    const endDate = new Date(end[0], end[1] - 1, 1, 12);
+    const result = [];
+    for (const date = new Date(startDate); date <= endDate; date.setMonth(date.getMonth() + 1)) result.push(monthKey(date));
+    return result;
+  }
+
   function buildAiReport() {
     const lines = [];
     const add = (line = "") => lines.push(line);
@@ -758,7 +770,7 @@
     const incomeTotal = incomes.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const expenseTotal = expenses.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const resultTotal = incomeTotal - expenseTotal;
-    const months = getMonthlySummary(13);
+    const months = reportMonthKeys(transactions).map((period) => ({ period, income: 0, expense: 0, result: 0, rate: 0 }));
     const reportMonths = months.map((month) => {
       const items = operationalTransactions.filter((item) => String(item.date || "").startsWith(month.period));
       const investmentItems = investmentTransactions.filter((item) => String(item.date || "").startsWith(month.period));
@@ -820,7 +832,7 @@
     addKeyValue("Taxa de sobra no período selecionado", currentMonth.income ? reportPercent(currentMonth.rate) : "sem entradas informadas");
 
     heading("3. PADRÕES E INSIGHTS DERIVADOS");
-    add(`- Nos últimos ${months.length} meses exibidos: ${positiveMonths} mês(es) com resultado positivo, ${negativeMonths} negativo(s) e ${months.length - positiveMonths - negativeMonths} sem resultado financeiro.`);
+    add(`- No histórico mensal completo (${months.length} competência(s)): ${positiveMonths} mês(es) com resultado positivo, ${negativeMonths} negativo(s) e ${months.length - positiveMonths - negativeMonths} sem resultado financeiro.`);
     if (monthsWithIncome.length) {
       const averageIncome = monthsWithIncome.reduce((sum, item) => sum + item.income, 0) / monthsWithIncome.length;
       const averageExpense = monthsWithIncome.reduce((sum, item) => sum + item.expense, 0) / monthsWithIncome.length;
@@ -839,7 +851,7 @@
     if (!transactions.length) add("- Não há lançamentos; qualquer recomendação deve começar por organizar a coleta de entradas, saídas e datas.");
     add("- Esses insights são alertas exploratórios, não diagnóstico financeiro; a IA deve pedir confirmação quando houver contexto ausente.");
 
-    heading("4. EVOLUÇÃO MENSAL");
+    heading("4. EVOLUÇÃO MENSAL — HISTÓRICO COMPLETO");
     add("mês | entradas_operacionais | saídas_operacionais | aportes | resgates | transferências | resultado_operacional | taxa_de_sobra");
     reportMonths.forEach((item) => add(`${item.period} | ${reportMoney(item.income)} | ${reportMoney(item.expense)} | ${reportMoney(item.aportes)} | ${reportMoney(item.resgates)} | ${reportMoney(item.transfers)} | ${reportMoney(item.result)} | ${item.income ? reportPercent(item.rate) : "não informado"}`));
 
