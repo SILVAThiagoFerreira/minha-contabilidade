@@ -33,6 +33,8 @@ No arquivo config.js, informe a URL /exec na propriedade apiUrl. O arquivo já d
 
 Depois, publique a alteração no GitHub Pages. O usuário cria a conta ou entra com usuário e senha; o Apps Script valida a credencial e devolve o cofre correspondente.
 
+Sempre que `backend/Code.gs` mudar, crie uma nova versão da implantação do Web App e confirme que o frontend continua usando a URL `/exec` da implantação atual. O GitHub Pages publica apenas os arquivos estáticos e não substitui o código já implantado no Apps Script.
+
 Se apiUrl estiver ausente, a tela bloqueia o uso e informa que o armazenamento online não foi configurado. O sistema nunca abre um modo alternativo local.
 
 ## 4. Abas e autenticação

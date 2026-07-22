@@ -36,6 +36,8 @@ O navegador não usa localStorage, sessionStorage, IndexedDB, cache de cofre ou 
 
 Em `Configurações`, use o cartão `Trocar senha`. O Apps Script confere a senha atual, gera novo salt e verificador e atualiza somente o cadastro correspondente na aba `Users`. A senha antiga não é exibida nem armazenada em texto puro; depois da troca, a sessão em memória passa a usar a nova senha para as próximas sincronizações.
 
+Se aparecer `O backend online ainda está desatualizado`, a interface publicada está correta, mas a implantação `/exec` do Apps Script ainda aponta para uma versão anterior. Nesse caso, copie novamente [backend/Code.gs](backend/Code.gs) para o projeto do Apps Script e crie uma nova versão da implantação do Web App; o GitHub Pages não atualiza Apps Script automaticamente.
+
 ## Relatório para IA
 
 Na tela `Análises`, `Exportar relatório TXT` baixa um arquivo UTF-8 com contexto e cobertura, resumo executivo, evolução mensal, categorias, liquidez por conta, custos fixos, dívidas, investimentos, patrimônio, transferências, poupança, lançamentos detalhados, alertas derivados, perguntas de investigação e o cofre em JSON no final. O relatório não consulta cotações externas nem inventa valores: deixa explícitas as limitações e diferencia fatos registrados de interpretações sugeridas.

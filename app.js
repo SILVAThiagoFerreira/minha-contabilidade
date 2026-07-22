@@ -1090,7 +1090,12 @@
       form.reset();
       showToast("Senha atualizada com segurança.");
     } catch (error) {
-      showToast(error.message || "Não foi possível atualizar a senha.", "error");
+      const message = String(error.message || "");
+      if (message.toLowerCase().includes("ação não reconhecida")) {
+        showToast("O backend online ainda está desatualizado. Reimplante o backend/Code.gs no Apps Script e tente novamente.", "error");
+      } else {
+        showToast(message || "Não foi possível atualizar a senha.", "error");
+      }
     } finally {
       submit.disabled = false;
     }
