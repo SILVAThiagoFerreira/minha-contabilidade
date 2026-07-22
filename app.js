@@ -47,7 +47,8 @@
 
   const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "numeric" });
   const shortDateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
+  const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const moneyInputFormatter = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const integerFormatter = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
   function uid(prefix = "id") {
@@ -63,10 +64,46 @@
   }
 
   function formatShortCurrency(value) {
-    const number = Number(value) || 0;
-    if (Math.abs(number) >= 1000000) return `R$ ${(number / 1000000).toFixed(1).replace(".", ",")} mi`;
-    if (Math.abs(number) >= 1000) return `R$ ${(number / 1000).toFixed(1).replace(".", ",")} mil`;
-    return formatCurrency(number);
+    return formatCurrency(value);
+  }
+
+  function formatMoneyInput(value) {
+    const digits = String(value ?? "").replace(/\D/g, "");
+    if (!digits) return "";
+    return moneyInputFormatter.format(Number(digits) / 100);
+  }
+
+  function setMoneyInputValue(input, value) {
+    if (!input) return;
+    const amount = toAmount(value);
+    input.value = amount ? moneyInputFormatter.format(amount) : "";
+  }
+
+  function maskMoneyInput(event) {
+    const input = event.currentTarget;
+    input.value = formatMoneyInput(input.value);
+  }
+
+  function setupMoneyInputs() {
+    const selectors = [
+      "#transactionForm [name='amount']",
+      "#accountForm [name='balance']",
+      "#transferForm [name='amount']",
+      "#savingsForm [name='manualYield']",
+      "#debtForm [name='balance']",
+      "#debtForm [name='installment']",
+      "#fixedCostForm [name='amount']",
+      "#cdbForm [name='principal']",
+      "#investmentOperationAmount",
+      "#patrimonyForm [name='currentValue']"
+    ];
+    $$(selectors.join(",")).forEach((input) => {
+      input.type = "text";
+      input.inputMode = "decimal";
+      input.autocomplete = "off";
+      input.dataset.moneyInput = "true";
+      input.addEventListener("input", maskMoneyInput);
+    });
   }
 
   function formatDate(value) {
@@ -572,7 +609,7 @@
     const summary = savingsSummary(account);
     fields.monthlyRate.value = summary.config ? summary.monthlyRate : "0.50";
     fields.referenceDate.value = summary.referenceDate;
-    fields.manualYield.value = summary.hasManualCorrection ? summary.config.manualYield : "";
+    setMoneyInputValue(fields.manualYield, summary.hasManualCorrection ? summary.config.manualYield : "");
     fields.correctionNote.value = summary.config?.correctionNote || "";
   }
 
@@ -848,7 +885,7 @@
     const form = $("#transactionForm");
     form.dataset.editId = item.id;
     $("input[name='date']", form).value = item.date || todayIso();
-    $("input[name='amount']", form).value = item.amount;
+    setMoneyInputValue($("input[name='amount']", form), item.amount);
     $("input[name='description']", form).value = item.description;
     $("#transactionCategory").value = item.category;
     $("#transactionAccount").value = item.accountId;
@@ -1013,7 +1050,7 @@
     form.dataset.editId = item.id;
     $("input[name='name']", form).value = item.name || "";
     $("select[name='type']", form).value = item.type || "outro";
-    $("input[name='currentValue']", form).value = item.currentValue ?? "";
+    setMoneyInputValue($("input[name='currentValue']", form), item.currentValue);
     $("input[name='referenceDate']", form).value = item.referenceDate || todayIso();
     $("textarea[name='notes']", form).value = item.notes || "";
     setFormMode(form, "patrimony", true);
@@ -1116,7 +1153,7 @@
     const form = $("#fixedCostForm");
     form.dataset.editId = item.id;
     $("input[name='name']", form).value = item.name || "";
-    $("input[name='amount']", form).value = item.amount;
+    setMoneyInputValue($("input[name='amount']", form), item.amount);
     $("input[name='dueDay']", form).value = item.dueDay;
     $("select[name='category']", form).value = normalizeLaunchCategory(item.category);
     $("select[name='accountId']", form).value = item.accountId || "";
@@ -1134,8 +1171,8 @@
     form.dataset.editId = item.id;
     $("input[name='name']", form).value = item.name || "";
     $("input[name='creditor']", form).value = item.creditor || "";
-    $("input[name='balance']", form).value = item.balance;
-    $("input[name='installment']", form).value = item.installment;
+    setMoneyInputValue($("input[name='balance']", form), item.balance);
+    setMoneyInputValue($("input[name='installment']", form), item.installment);
     $("input[name='dueDay']", form).value = item.dueDay || "";
     $("select[name='accountId']", form).value = item.accountId || "";
     $("input[name='active']", form).checked = item.active !== false;
@@ -1153,7 +1190,7 @@
     $("input[name='name']", form).value = item.name || "";
     $("select[name='investmentType']", form).value = item.type || "cdb";
     $("select[name='accountId']", form).value = item.accountId || "";
-    $("input[name='principal']", form).value = item.principal;
+    setMoneyInputValue($("input[name='principal']", form), item.principal);
     $("input[name='rate']", form).value = item.rate ?? "";
     $("select[name='rateType']", form).value = normalizedRateType(item) || "none";
     $("input[name='benchmarkRate']", form).value = item.benchmarkRate ?? item.cdiRate ?? "";
@@ -1253,6 +1290,7 @@
     $("#savingsForm").addEventListener("submit", handleSavingsSubmit);
     $("#savingsAccount").addEventListener("change", fillSavingsForm);
     $("#profileForm").addEventListener("submit", handleProfileSubmit);
+    setupMoneyInputs();
     document.addEventListener("click", async (event) => {
       const target = event.target.closest("[data-view-target], [data-view-link], [data-action]");
       if (!target) return;
