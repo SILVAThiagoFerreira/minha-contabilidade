@@ -40,6 +40,16 @@ assertAny(backend, [/fromAccount|sourceAccount|contaOrigem|origem/i], "o backend
 assertAny(backend, [/toAccount|targetAccount|contaDestino|destino/i], "o backend precisa reconhecer o destino da transferência");
 assertAny(backend, [/transaction|lancamento|entrada|saida/i], "a transferência precisa ser registrada no histórico financeiro");
 
+// As categorias de lançamentos devem ser específicas e não podem esconder
+// registros antigos atrás do rótulo genérico "Outros".
+for (const category of ["Compras online", "Vestuário", "Cuidados pessoais", "Pets", "Viagens", "Impostos e taxas", "Serviços", "Doações", "Categoria não disponível no sistema"]) {
+  assert.match(js, new RegExp(category), `categoria ausente: ${category}`);
+}
+assert.match(js, /normalizeLaunchCategory/, "categorias antigas precisam ser normalizadas");
+assert.match(js, /toLowerCase\(\)\s*===\s*["']outros["']/, "o valor legado Outros precisa ser migrado");
+assert.match(html, /fixedCostCategory/, "o formulário de custos fixos precisa usar a lista centralizada de categorias");
+assert.doesNotMatch(html, /<option>Outros<\/option>/i, "o select de custos fixos não deve expor Outros");
+
 // A agenda controla referência mensal e indicadores, sem duplicar o lançamento manual.
 assertAny(html, [/agenda|schedule/i], "a interface precisa expor a agenda de custos fixos");
 assertAny(html, [/fixo|fixed/i], "a agenda precisa estar vinculada aos custos fixos");

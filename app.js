@@ -14,7 +14,28 @@
     analises: "Análises",
     configuracoes: "Configurações"
   };
-  const CATEGORIES = ["Moradia", "Casa", "Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Assinaturas", "Renda", "Investimentos", "Outros"];
+  const UNAVAILABLE_CATEGORY = "Categoria não disponível no sistema";
+  const CATEGORIES = [
+    "Moradia",
+    "Casa",
+    "Alimentação",
+    "Transporte",
+    "Saúde",
+    "Educação",
+    "Lazer",
+    "Assinaturas",
+    "Compras online",
+    "Vestuário",
+    "Cuidados pessoais",
+    "Pets",
+    "Viagens",
+    "Impostos e taxas",
+    "Serviços",
+    "Doações",
+    "Renda",
+    "Investimentos",
+    UNAVAILABLE_CATEGORY
+  ];
   const CATEGORY_COLORS = ["#b6dcca", "#f3afb5", "#f3c885", "#b9cada", "#c9b9dc", "#a9cdd0", "#f0c3a0", "#d2d89e"];
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -103,14 +124,23 @@
     };
   }
 
+  function normalizeLaunchCategory(category) {
+    const value = String(category || "").trim();
+    return !value || value.toLowerCase() === "outros" ? UNAVAILABLE_CATEGORY : value;
+  }
+
   function normalizeVault(value) {
     const normalized = { ...blankVault(), ...(value || {}) };
     normalized.profile = { ...blankVault().profile, ...(value?.profile || {}) };
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
     normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
-    normalized.transactions = Array.isArray(value?.transactions) ? value.transactions : [];
+    normalized.transactions = Array.isArray(value?.transactions)
+      ? value.transactions.map((item) => ({ ...item, category: normalizeLaunchCategory(item?.category) }))
+      : [];
     normalized.transfers = Array.isArray(value?.transfers) ? value.transfers : [];
-    normalized.fixedCosts = Array.isArray(value?.fixedCosts) ? value.fixedCosts : [];
+    normalized.fixedCosts = Array.isArray(value?.fixedCosts)
+      ? value.fixedCosts.map((item) => ({ ...item, category: normalizeLaunchCategory(item?.category) }))
+      : [];
     normalized.fixedCostPayments = Array.isArray(value?.fixedCostPayments)
       ? value.fixedCostPayments.map((item) => ({
         ...item,
@@ -269,6 +299,7 @@
     const linkedAccounts = vault.accounts.map((account) => ({ value: account.id, label: `${account.name} · ${account.type === "poupanca" ? "Poupança" : "Conta corrente"}` }));
     const savingsAccounts = vault.accounts.filter((account) => account.type === "poupanca").map((account) => ({ value: account.id, label: `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` }));
     populateSelect($("#transactionCategory"), CATEGORIES.map((category) => ({ value: category, label: category })), $("#transactionCategory")?.value || "Alimentação");
+    populateSelect($("#fixedCostCategory"), CATEGORIES.map((category) => ({ value: category, label: category })), $("#fixedCostCategory")?.value || "Moradia");
     populateSelect($("#transactionAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transactionAccount")?.value || "");
     populateSelect($("#debtAccount"), [{ value: "", label: "Sem conta definida" }, ...accounts], $("#debtAccount")?.value || "");
     populateSelect($("#transferSourceAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transferSourceAccount")?.value || "");
@@ -910,7 +941,7 @@
     event.preventDefault();
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
-    const record = { id: form.dataset.editId || uid("fixed"), name: data.name.trim(), category: data.category, amount: toAmount(data.amount), dueDay: Number(data.dueDay), accountId: data.accountId || "", active: data.active === "on" };
+    const record = { id: form.dataset.editId || uid("fixed"), name: data.name.trim(), category: normalizeLaunchCategory(data.category), amount: toAmount(data.amount), dueDay: Number(data.dueDay), accountId: data.accountId || "", active: data.active === "on" };
     const existingIndex = vault.fixedCosts.findIndex((item) => item.id === form.dataset.editId);
     if (existingIndex >= 0) vault.fixedCosts[existingIndex] = { ...vault.fixedCosts[existingIndex], ...record };
     else vault.fixedCosts.push(record);
@@ -1087,7 +1118,7 @@
     $("input[name='name']", form).value = item.name || "";
     $("input[name='amount']", form).value = item.amount;
     $("input[name='dueDay']", form).value = item.dueDay;
-    $("select[name='category']", form).value = item.category || "Outros";
+    $("select[name='category']", form).value = normalizeLaunchCategory(item.category);
     $("select[name='accountId']", form).value = item.accountId || "";
     $("input[name='active']", form).checked = item.active !== false;
     setFormMode(form, "fixed", true);

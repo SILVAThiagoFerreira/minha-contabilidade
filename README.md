@@ -8,7 +8,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - planilha Google como fonte oficial dos dados;
 - histórico append-only na própria planilha, com revisões anteriores preservadas;
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
-- lançamentos por conta e categoria;
+- lançamentos por conta e categoria, com opções específicas como compras online, vestuário, pets, viagens, serviços e impostos;
 - transferências entre contas, com saída identificada na origem e entrada correspondente no destino;
 - contas correntes e poupanças por banco;
 - investimentos vinculados diretamente a uma conta já cadastrada;
@@ -21,6 +21,8 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
 - análises mensais, categorias, composição patrimonial e taxa de sobra;
 - workflow de GitHub Pages.
+
+As categorias de lançamentos não usam mais a opção genérica “Outros”. Quando um lançamento antigo ainda contém esse valor, ele é exibido e salvo como “Categoria não disponível no sistema”, para deixar claro que a descrição precisa ser conferida sem apagar o registro.
 
 ## Arquitetura online
 
