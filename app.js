@@ -91,7 +91,9 @@
       accounts: [],
       debts: [],
       transactions: [],
+      transfers: [],
       fixedCosts: [],
+      fixedCostPayments: [],
       cdbs: [],
       investments: [],
       savings: [],
@@ -105,7 +107,14 @@
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
     normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
     normalized.transactions = Array.isArray(value?.transactions) ? value.transactions : [];
+    normalized.transfers = Array.isArray(value?.transfers) ? value.transfers : [];
     normalized.fixedCosts = Array.isArray(value?.fixedCosts) ? value.fixedCosts : [];
+    normalized.fixedCostPayments = Array.isArray(value?.fixedCostPayments)
+      ? value.fixedCostPayments.map((item) => ({
+        ...item,
+        period: item?.period || item?.month || ""
+      }))
+      : [];
     const legacyCdbs = Array.isArray(value?.cdbs) ? value.cdbs : [];
     const storedInvestments = Array.isArray(value?.investments) ? value.investments : [];
     const investmentById = new Map();
@@ -258,6 +267,9 @@
     const savingsAccounts = vault.accounts.filter((account) => account.type === "poupanca").map((account) => ({ value: account.id, label: `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` }));
     populateSelect($("#transactionCategory"), CATEGORIES.map((category) => ({ value: category, label: category })), $("#transactionCategory")?.value || "Alimentação");
     populateSelect($("#transactionAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transactionAccount")?.value || "");
+    populateSelect($("#debtAccount"), [{ value: "", label: "Sem conta definida" }, ...accounts], $("#debtAccount")?.value || "");
+    populateSelect($("#transferSourceAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transferSourceAccount")?.value || "");
+    populateSelect($("#transferDestinationAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transferDestinationAccount")?.value || "");
     populateSelect($("#fixedAccount"), [{ value: "", label: "Sem conta definida" }, ...accounts], $("#fixedAccount")?.value || "");
     populateSelect($("#cdbAccount"), linkedAccounts.length ? linkedAccounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#cdbAccount")?.value || "");
     populateSelect($("#savingsAccount"), savingsAccounts.length ? savingsAccounts : [{ value: "", label: "Cadastre uma conta do tipo poupança" }], $("#savingsAccount")?.value || "");
@@ -269,7 +281,29 @@
   }
 
   function sumTransactions(items, type) {
-    return items.filter((item) => item.type === type).reduce((sum, item) => sum + toAmount(item.amount), 0);
+    return items.filter((item) => item.type === type && !item.transferId).reduce((sum, item) => sum + toAmount(item.amount), 0);
+  }
+
+  function transferById(transferId) {
+    return vault.transfers.find((item) => item.id === transferId);
+  }
+
+  function fixedCostPayment(fixedCostId, period = currentPeriod()) {
+    return vault.fixedCostPayments.find((item) => item.fixedCostId === fixedCostId && item.period === period && item.completed !== false);
+  }
+
+  function fixedCostAgenda(period = currentPeriod()) {
+    return vault.fixedCosts
+      .filter((item) => item.active !== false)
+      .map((item) => ({ ...item, paid: Boolean(fixedCostPayment(item.id, period)) }))
+      .sort((a, b) => Number(a.dueDay || 99) - Number(b.dueDay || 99));
+  }
+
+  function fixedCostStats(period = currentPeriod()) {
+    const items = fixedCostAgenda(period);
+    const total = items.reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const paid = items.filter((item) => item.paid).reduce((sum, item) => sum + toAmount(item.amount), 0);
+    return { total, paid, pending: Math.max(0, total - paid), items };
   }
 
   function accountBalance(accountId) {
@@ -426,7 +460,7 @@
   }
 
   function renderCategories(items) {
-    const grouped = items.filter((item) => item.type === "saida").reduce((map, item) => { map[item.category] = (map[item.category] || 0) + toAmount(item.amount); return map; }, {});
+    const grouped = items.filter((item) => item.type === "saida" && !item.transferId).reduce((map, item) => { map[item.category] = (map[item.category] || 0) + toAmount(item.amount); return map; }, {});
     const entries = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
     const total = entries.reduce((sum, [, value]) => sum + value, 0);
     const stops = entries.length ? entries.map(([, value], index) => `${CATEGORY_COLORS[index % CATEGORY_COLORS.length]} ${index === 0 ? 0 : entries.slice(0, index).reduce((sum, [, amount]) => sum + amount, 0) / total * 100}% ${entries.slice(0, index + 1).reduce((sum, [, amount]) => sum + amount, 0) / total * 100}%`).join(", ") : "#e4eaed 0 100%";
@@ -450,16 +484,29 @@
     const filter = $("#transactionFilter").value;
     const items = transactionsForPeriod(period).filter((item) => filter === "todos" || item.type === filter).sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
-     $("#transactionTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th></th></tr></thead><tbody>${items.map((item) => { const actions = item.investmentOperationId ? `<span class="status-pill status-pill--muted" title="Movimentação controlada pela carteira de investimentos">INVESTIMENTO</span>` : `<span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span>`; return `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}</td><td>${escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td>${actions}</td></tr>`; }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${monthLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
+    $("#transactionTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th></th></tr></thead><tbody>${items.map((item) => {
+      const transfer = item.transferId ? transferById(item.transferId) : null;
+      const transferLabel = transfer ? `<span class="status-pill status-pill--blue" title="Movimentação interna entre contas">TRANSFERÊNCIA · ${item.transferRole === "origem" ? "SAÍDA" : "ENTRADA"}</span>` : "";
+      const actions = item.investmentOperationId ? `<span class="status-pill status-pill--muted" title="Movimentação controlada pela carteira de investimentos">INVESTIMENTO</span>` : item.transferId ? transferLabel : `<span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span>`;
+      const description = transfer ? `${escapeHtml(transfer.description || "Transferência entre contas")}<br><small class="muted-cell">${item.transferRole === "origem" ? `para ${escapeHtml(accountNames[transfer.destinationAccountId] || "outra conta")}` : `de ${escapeHtml(accountNames[transfer.sourceAccountId] || "outra conta")}`}</small>` : `<strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}`;
+      return `<tr><td>${formatDate(item.date)}</td><td>${description}</td><td>${transfer ? transferLabel : escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td>${actions}</td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${monthLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
   }
 
   function renderAccounts() {
     const balance = totalBalance();
-    const current = transactionsForPeriod().filter((item) => item.type === "entrada").reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const current = sumTransactions(transactionsForPeriod(), "entrada");
     const invested = totalInvested();
     $("#accountMetrics").innerHTML = [metricCard("SALDO EM CONTAS", formatShortCurrency(balance), "saldo calculado", "metric-card--accent"), metricCard("ENTRADAS DO MÊS", formatShortCurrency(current), "movimentos positivos", "metric-card--positive"), metricCard("TOTAL INVESTIDO", formatShortCurrency(invested), `${vault.investments.length} posição(ões)`, "")].join("");
     $("#accountList").innerHTML = vault.accounts.length ? vault.accounts.map((account) => `<div class="account-row"><div class="account-row-main"><span class="account-mark">${escapeHtml(account.name.slice(0, 2).toUpperCase())}</span><div><strong>${escapeHtml(account.name)}</strong><small>${account.type === "poupanca" ? "Poupança" : "Conta corrente"}${account.nickname ? ` · ${escapeHtml(account.nickname)}` : ""}</small></div></div><strong class="row-value">${formatCurrency(accountBalance(account.id))}</strong><span class="table-actions"><button class="table-action" type="button" data-action="delete-account" data-id="${account.id}" title="Excluir conta">×</button></span></div>`).join("") : `<div class="empty-state"><strong>Nenhuma conta cadastrada.</strong><span>Cadastre seu primeiro banco para acompanhar os saldos.</span></div>`;
+    renderTransfers();
     renderSavingsManagement();
+  }
+
+  function renderTransfers() {
+    const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
+    const items = vault.transfers.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 12);
+    $("#transferTable").innerHTML = items.length ? `<div class="transfer-history-heading"><span class="eyebrow">HISTÓRICO DE TRANSFERÊNCIAS</span><small>As duas pontas permanecem vinculadas aos lançamentos.</small></div><table class="data-table"><thead><tr><th>DATA</th><th>ORIGEM</th><th>DESTINO</th><th>VALOR</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(accountNames[item.sourceAccountId] || "—")}</strong></td><td>${escapeHtml(accountNames[item.destinationAccountId] || "—")}</td><td class="number">${formatCurrency(item.amount)}</td><td><button class="table-action" type="button" data-action="delete-transfer" data-id="${item.id}" title="Excluir transferência" aria-label="Excluir transferência">×</button></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhuma transferência registrada.</strong><span>Use o formulário acima para mover dinheiro entre suas contas.</span></div>`;
   }
 
   function fillSavingsForm() {
@@ -506,11 +553,10 @@
   }
 
   function renderFixedCosts() {
-    const active = vault.fixedCosts.filter((item) => item.active !== false);
-    const total = active.reduce((sum, item) => sum + toAmount(item.amount), 0);
-    const average = active.length ? total / active.length : 0;
-    const next = active.slice().sort((a, b) => Number(a.dueDay) - Number(b.dueDay))[0]?.dueDay;
-    $("#fixedMetrics").innerHTML = [metricCard("CUSTO MENSAL", formatShortCurrency(total), "compromissos ativos", "metric-card--accent"), metricCard("ITENS ATIVOS", integerFormatter.format(active.length), "despesas recorrentes", ""), metricCard("MÉDIA POR ITEM", formatShortCurrency(average), next ? `próximo vencimento: dia ${next}` : "cadastre um compromisso", "metric-card--warning")].join("");
+    const stats = fixedCostStats();
+    $("#fixedMetrics").innerHTML = [metricCard("CUSTO FIXO NO MÊS", formatShortCurrency(stats.total), `${stats.items.length} compromisso(s) ativo(s)`, "metric-card--accent"), metricCard("JÁ PAGUEI", formatShortCurrency(stats.paid), "referência marcada na agenda", "metric-card--positive"), metricCard("VOU PAGAR", formatShortCurrency(stats.pending), "ainda não concluído", "metric-card--warning")].join("");
+    $("#fixedAgendaPeriod").textContent = monthLabel(currentPeriod());
+    $("#fixedAgendaTable").innerHTML = stats.items.length ? `<table class="data-table fixed-agenda-table"><thead><tr><th>VENC.</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>VALOR</th><th>STATUS</th><th></th></tr></thead><tbody>${stats.items.map((item) => `<tr class="${item.paid ? "is-completed" : ""}"><td>Dia ${escapeHtml(item.dueDay)}</td><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.category || "Custo fixo")}</td><td class="number">${formatCurrency(item.amount)}</td><td><span class="status-pill ${item.paid ? "status-pill--green" : "status-pill--yellow"}">${item.paid ? "CONCLUÍDO" : "A PAGAR"}</span></td><td><button class="agenda-toggle ${item.paid ? "is-completed" : ""}" type="button" data-action="toggle-fixed-payment" data-id="${item.id}" aria-pressed="${item.paid}">${item.paid ? "Desmarcar" : "Concluído"}</button></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum custo fixo ativo para ${monthLabel(currentPeriod()).toLowerCase()}.</strong><span>Cadastre um compromisso abaixo para montar sua agenda mensal.</span></div>`;
     const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
     const items = vault.fixedCosts.slice().sort((a, b) => Number(a.dueDay) - Number(b.dueDay));
     $("#fixedCostTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>VENC.</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th>STATUS</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>Dia ${escapeHtml(item.dueDay)}</td><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number">${formatCurrency(item.amount)}</td><td><span class="status-pill ${item.active !== false ? "status-pill--green" : "status-pill--muted"}">${item.active !== false ? "ATIVO" : "PAUSADO"}</span></td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-fixed" data-id="${item.id}" title="Editar custo fixo" aria-label="Editar custo fixo">✎</button><button class="table-action" type="button" data-action="toggle-fixed" data-id="${item.id}" title="Ativar ou pausar" aria-label="Ativar ou pausar">↻</button><button class="table-action" type="button" data-action="delete-fixed" data-id="${item.id}" title="Excluir" aria-label="Excluir custo fixo">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum custo fixo cadastrado.</strong><span>Registre aluguel, assinaturas, contas e outros compromissos mensais.</span></div>`;
@@ -544,7 +590,7 @@
   function renderAnalyses() {
     const months = getMonthlySummary();
     const periodItems = transactionsForPeriod();
-    const expenseItems = periodItems.filter((item) => item.type === "saida");
+    const expenseItems = periodItems.filter((item) => item.type === "saida" && !item.transferId);
     const grouped = expenseItems.reduce((map, item) => { map[item.category] = (map[item.category] || 0) + toAmount(item.amount); return map; }, {});
     const topCategory = Object.entries(grouped).sort((a, b) => b[1] - a[1])[0];
     const selectedMonth = months[months.length - 1];
@@ -608,6 +654,9 @@
       $("input[name='transactionType'][value='saida']", form).checked = true;
       $("#transactionCategory").value = "Alimentação";
     }
+    if (form.id === "transferForm") {
+      $("input[name='date']", form).value = todayIso();
+    }
     if (form.id === "fixedCostForm") {
       $("input[name='active']", form).checked = true;
       setFormMode(form, "fixed", false);
@@ -651,6 +700,7 @@
 
   function fillDefaultForms() {
     clearForm($("#transactionForm"));
+    clearForm($("#transferForm"));
     clearForm($("#debtForm"));
     clearForm($("#cdbForm"));
   }
@@ -660,6 +710,7 @@
     if (collection === "transactions" && target?.investmentOperationId) { showToast("Este lançamento pertence a uma operação de investimento e não pode ser removido isoladamente.", "error"); return; }
     if (!window.confirm(message)) return;
     vault[collection] = vault[collection].filter((item) => item.id !== id);
+    if (collection === "fixedCosts") vault.fixedCostPayments = vault.fixedCostPayments.filter((item) => item.fixedCostId !== id);
     await saveCurrentVault();
     renderAll();
     showToast("Registro removido.");
@@ -735,6 +786,58 @@
     showToast("Conta adicionada.");
   }
 
+  async function handleTransferSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const source = accountById(data.sourceAccountId);
+    const destination = accountById(data.destinationAccountId);
+    const amount = roundAmount(toAmount(data.amount));
+    if (!source || !destination) { showToast("Selecione as duas contas da transferência.", "error"); return; }
+    if (source.id === destination.id) { showToast("A conta de origem e a conta de destino precisam ser diferentes.", "error"); return; }
+    if (amount <= 0) { showToast("Informe um valor maior que zero.", "error"); return; }
+    const transferId = uid("transfer");
+    const date = data.date || todayIso();
+    const description = data.description?.trim() || `Transferência para ${destination.name}`;
+    const notes = data.notes?.trim() || "";
+    vault.transfers.push({ id: transferId, date, description, sourceAccountId: source.id, destinationAccountId: destination.id, amount, notes, createdAt: new Date().toISOString() });
+    vault.transactions.push(
+      { id: uid("tx"), date, description, category: "Transferências", accountId: source.id, amount, type: "saida", notes, recurring: false, transferId, transferRole: "origem" },
+      { id: uid("tx"), date, description, category: "Transferências", accountId: destination.id, amount, type: "entrada", notes, recurring: false, transferId, transferRole: "destino" }
+    );
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      vault.transfers = vault.transfers.filter((item) => item.id !== transferId);
+      vault.transactions = vault.transactions.filter((item) => item.transferId !== transferId);
+      showToast(error.message || "A transferência não foi sincronizada.", "error");
+      return;
+    }
+    clearForm(form);
+    renderAll();
+    showToast("Transferência registrada nas duas contas.");
+  }
+
+  async function deleteTransfer(transferId) {
+    const transfer = transferById(transferId);
+    if (!transfer) return;
+    if (!window.confirm("Excluir esta transferência e as duas pontas vinculadas nos lançamentos?")) return;
+    const previousTransfers = vault.transfers;
+    const previousTransactions = vault.transactions;
+    vault.transfers = vault.transfers.filter((item) => item.id !== transferId);
+    vault.transactions = vault.transactions.filter((item) => item.transferId !== transferId);
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      vault.transfers = previousTransfers;
+      vault.transactions = previousTransactions;
+      renderAll();
+      return;
+    }
+    renderAll();
+    showToast("Transferência removida.");
+  }
+
   async function handleDebtSubmit(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -761,6 +864,25 @@
     clearForm(form);
     renderAll();
     showToast(existingIndex >= 0 ? "Custo fixo atualizado." : "Custo fixo salvo.");
+  }
+
+  async function toggleFixedPayment(fixedCostId) {
+    const fixedCost = vault.fixedCosts.find((item) => item.id === fixedCostId && item.active !== false);
+    if (!fixedCost) return;
+    const period = currentPeriod();
+    const previousPayments = vault.fixedCostPayments;
+    const existingIndex = vault.fixedCostPayments.findIndex((item) => item.fixedCostId === fixedCostId && item.period === period);
+    if (existingIndex >= 0) vault.fixedCostPayments.splice(existingIndex, 1);
+    else vault.fixedCostPayments.push({ id: uid("fixed-payment"), fixedCostId, period, completed: true, completedAt: new Date().toISOString() });
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      vault.fixedCostPayments = previousPayments;
+      renderAll();
+      return;
+    }
+    renderAll();
+    showToast(existingIndex >= 0 ? "Pagamento desmarcado na agenda." : "Pagamento marcado como concluído na agenda.");
   }
 
   async function handleCdbSubmit(event) {
@@ -964,7 +1086,7 @@
   }
 
   async function clearAllData() {
-    if (!window.confirm("Apagar todos os lançamentos, contas, dívidas, custos fixos, investimentos e configurações de poupança deste usuário? Essa ação não pode ser desfeita.")) return;
+    if (!window.confirm("Apagar todos os lançamentos, transferências, contas, dívidas, custos fixos, agenda, investimentos e configurações de poupança deste usuário? Essa ação não pode ser desfeita.")) return;
     vault = blankVault(vault.profile.displayName);
     await saveCurrentVault();
     renderAll();
@@ -976,12 +1098,13 @@
     if (!account) return;
     const references = [
       vault.transactions.some((item) => item.accountId === accountId),
+      vault.transfers.some((item) => item.sourceAccountId === accountId || item.destinationAccountId === accountId),
       vault.debts.some((item) => item.accountId === accountId),
       vault.fixedCosts.some((item) => item.accountId === accountId),
       vault.investments.some((item) => item.accountId === accountId),
       vault.savings.some((item) => item.accountId === accountId)
     ];
-    if (references.some(Boolean)) { showToast("Não exclua uma conta que ainda está vinculada a lançamentos, custos, investimentos, dívidas ou poupança.", "error"); return; }
+    if (references.some(Boolean)) { showToast("Não exclua uma conta que ainda está vinculada a lançamentos, transferências, custos, investimentos, dívidas ou poupança.", "error"); return; }
     await deleteById("accounts", accountId, `Excluir a conta ${account.name}?`);
   }
 
@@ -1001,6 +1124,7 @@
     $("#transactionFilter").addEventListener("change", renderTransactions);
     $("#transactionForm").addEventListener("submit", handleTransactionSubmit);
     $("#accountForm").addEventListener("submit", handleAccountSubmit);
+    $("#transferForm").addEventListener("submit", handleTransferSubmit);
     $("#debtForm").addEventListener("submit", handleDebtSubmit);
     $("#fixedCostForm").addEventListener("submit", handleFixedSubmit);
     $("#cdbForm").addEventListener("submit", handleCdbSubmit);
@@ -1018,6 +1142,7 @@
       if (action === "open-transaction") { setView("lancamentos"); window.setTimeout(() => $("#transactionFormPanel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); }
       if (action === "clear-all") await clearAllData();
       if (action === "delete-transaction") await deleteById("transactions", target.dataset.id, "Excluir este lançamento?");
+      if (action === "delete-transfer") await deleteTransfer(target.dataset.id);
       if (action === "edit-transaction") editTransaction(target.dataset.id);
       if (action === "delete-account") await deleteAccount(target.dataset.id);
       if (action === "edit-debt") editDebt(target.dataset.id);
@@ -1031,6 +1156,7 @@
       if (action === "open-investment-operation") openInvestmentOperation(target.dataset.id, target.dataset.operationType);
       if (action === "close-investment-operation") closeInvestmentOperation();
       if (action === "toggle-fixed") { const item = vault.fixedCosts.find((fixed) => fixed.id === target.dataset.id); if (item) { item.active = item.active === false; await saveCurrentVault(); renderAll(); showToast(item.active ? "Custo fixo ativado." : "Custo fixo pausado."); } }
+      if (action === "toggle-fixed-payment") await toggleFixedPayment(target.dataset.id);
     });
   }
 

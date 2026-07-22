@@ -179,6 +179,8 @@ function blankVault_(displayName) {
     debts: [],
     transactions: [],
     fixedCosts: [],
+    transfers: [],
+    fixedCostPayments: [],
     cdbs: [],
     investments: [],
     savings: [],
@@ -188,14 +190,108 @@ function blankVault_(displayName) {
 
 function jsonPayload_(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Dados do usuário ausentes ou inválidos.");
-  ["accounts", "debts", "transactions", "fixedCosts", "cdbs", "investments", "savings"].forEach((name) => {
+  ["accounts", "debts", "transactions", "fixedCosts", "transfers", "fixedCostPayments", "cdbs", "investments", "savings"].forEach((name) => {
     if (payload[name] !== undefined && !Array.isArray(payload[name])) throw new Error("Estrutura inválida em " + name + ".");
     if (Array.isArray(payload[name]) && payload[name].length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de registros excedida em " + name + ".");
   });
   validateInvestmentOperations_(payload.investments || [], payload.transactions || []);
+  validateTransfers_(payload.transfers || [], payload.transactions || [], payload.accounts || []);
+  validateFixedCostPayments_(payload.fixedCostPayments || [], payload.fixedCosts || []);
   const text = JSON.stringify(payload);
   if (text.length > MAX_PAYLOAD_CHARS) throw new Error("O cofre ultrapassou o limite seguro da planilha.");
   return text;
+}
+
+/**
+ * Transferências são dados adicionais ao histórico: o movimento financeiro
+ * continua em transactions, mas as duas linhas precisam carregar o mesmo
+ * transferId e os papéis "origem"/"destino". A coleção transfers é opcional
+ * para manter compatibilidade com payloads que usam somente esse vínculo nas
+ * transações; quando presente, ela descreve a origem, o destino e o valor.
+ */
+function validateTransfers_(transfers, transactions, accounts) {
+  const transferById = Object.create(null);
+  const transactionGroups = Object.create(null);
+  const accountIds = Object.create(null);
+
+  if (Array.isArray(accounts)) {
+    accounts.forEach((account) => {
+      if (account && typeof account === "object" && String(account.id || "")) accountIds[String(account.id)] = true;
+    });
+  }
+
+  transfers.forEach((transfer) => {
+    if (!transfer || typeof transfer !== "object" || Array.isArray(transfer)) throw new Error("Transferência inválida.");
+    const id = String(transfer.id || "").trim();
+    const fromAccountId = String(transfer.sourceAccountId || transfer.fromAccountId || "").trim();
+    const toAccountId = String(transfer.destinationAccountId || transfer.toAccountId || "").trim();
+    const amount = Number(transfer.amount);
+    if (!id || transferById[id]) throw new Error("Cada transferência precisa ter um ID único.");
+    if (!fromAccountId || !toAccountId || fromAccountId === toAccountId) throw new Error("A transferência precisa ligar duas contas diferentes.");
+    if (!isFinite(amount) || amount <= 0) throw new Error("O valor da transferência precisa ser maior que zero.");
+    if (!String(transfer.date || "").trim()) throw new Error("A transferência precisa ter uma data.");
+    if (Object.keys(accountIds).length && (!accountIds[fromAccountId] || !accountIds[toAccountId])) throw new Error("A transferência referencia uma conta inexistente.");
+    transferById[id] = { fromAccountId, toAccountId, amount };
+  });
+
+  transactions.forEach((transaction) => {
+    if (!transaction || typeof transaction !== "object" || Array.isArray(transaction)) return;
+    const transferId = String(transaction.transferId || "").trim();
+    if (!transferId) return;
+    const roleValue = String(transaction.transferRole || "").trim().toLowerCase();
+    const role = roleValue === "origem" || roleValue === "saida" ? "saida" : roleValue === "destino" || roleValue === "entrada" ? "entrada" : "";
+    const type = String(transaction.type || "").trim().toLowerCase();
+    const amount = Number(transaction.amount);
+    if (!role) throw new Error("O papel da transação de transferência deve ser origem/saída ou destino/entrada.");
+    if (type !== role) throw new Error("O tipo da transação não confere com o papel da transferência.");
+    if (!String(transaction.accountId || "").trim() || !isFinite(amount) || amount <= 0) throw new Error("A transação de transferência precisa indicar conta e valor válido.");
+    if (!transactionGroups[transferId]) transactionGroups[transferId] = { saida: null, entrada: null };
+    if (transactionGroups[transferId][role]) throw new Error("Uma transferência não pode ter duas transações do mesmo papel.");
+    transactionGroups[transferId][role] = { accountId: String(transaction.accountId).trim(), amount };
+  });
+
+  Object.keys(transactionGroups).forEach((transferId) => {
+    const group = transactionGroups[transferId];
+    if (!group.saida || !group.entrada) throw new Error("Toda transferência precisa ter uma saída e uma entrada.");
+    if (group.saida.accountId === group.entrada.accountId || Math.abs(group.saida.amount - group.entrada.amount) > 0.005) throw new Error("A saída e a entrada da transferência precisam ter contas diferentes e o mesmo valor.");
+    const transfer = transferById[transferId];
+    if (transfer && (group.saida.accountId !== transfer.fromAccountId || group.entrada.accountId !== transfer.toAccountId || Math.abs(group.saida.amount - transfer.amount) > 0.005)) throw new Error("As transações não conferem com a transferência informada.");
+  });
+
+  Object.keys(transferById).forEach((transferId) => {
+    if (!transactionGroups[transferId]) throw new Error("A transferência precisa ter as transações de saída e entrada correspondentes.");
+  });
+}
+
+/**
+ * A agenda é uma referência mensal, não um lançamento contábil. Cada custo
+ * fixo pode ter no máximo uma marcação por mês; completed só registra a
+ * conclusão e não é convertido em transaction.
+ */
+function validateFixedCostPayments_(payments, fixedCosts) {
+  const paymentIds = Object.create(null);
+  const paymentByMonth = Object.create(null);
+  const fixedCostIds = Object.create(null);
+  (fixedCosts || []).forEach((fixedCost) => {
+    if (fixedCost && typeof fixedCost === "object" && String(fixedCost.id || "").trim()) fixedCostIds[String(fixedCost.id).trim()] = true;
+  });
+  payments.forEach((payment) => {
+    if (!payment || typeof payment !== "object" || Array.isArray(payment)) throw new Error("Registro de agenda de custo fixo inválido.");
+    const id = String(payment.id || "").trim();
+    const fixedCostId = String(payment.fixedCostId || "").trim();
+    const period = String(payment.period || payment.month || "").trim();
+    if (!id || paymentIds[id]) throw new Error("Cada registro da agenda precisa ter um ID único.");
+    if (!fixedCostId) throw new Error("O registro da agenda precisa indicar o custo fixo.");
+    if (Object.keys(fixedCostIds).length && !fixedCostIds[fixedCostId]) throw new Error("O registro da agenda referencia um custo fixo inexistente.");
+    if (payment.period !== undefined && payment.month !== undefined && String(payment.period).trim() !== String(payment.month).trim()) throw new Error("O período do custo fixo está duplicado com valores diferentes.");
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new Error("O período do custo fixo deve estar no formato AAAA-MM.");
+    if (payment.completed !== undefined && typeof payment.completed !== "boolean") throw new Error("A conclusão do custo fixo deve ser booleana.");
+    if (payment.completedAt !== undefined && payment.completedAt !== null && !String(payment.completedAt).trim()) throw new Error("A data de conclusão do custo fixo é inválida.");
+    const monthKey = fixedCostId + "|" + period;
+    if (paymentByMonth[monthKey]) throw new Error("Já existe uma marcação para este custo fixo neste mês.");
+    paymentIds[id] = true;
+    paymentByMonth[monthKey] = true;
+  });
 }
 
 function validateInvestmentOperations_(investments, transactions) {
