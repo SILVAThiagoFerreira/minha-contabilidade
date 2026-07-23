@@ -571,6 +571,12 @@
     const period = currentPeriod();
     const filter = $("#transactionFilter").value;
     const items = transactionsForPeriod(period).filter((item) => filter === "todos" || item.type === filter).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const income = sumTransactions(items, "entrada");
+    const expense = sumTransactions(items, "saida");
+    $("#transactionMetrics").innerHTML = [
+      `<article class="transaction-metric transaction-metric--income"><span class="eyebrow">ENTRADAS</span><strong>${formatShortCurrency(income)}</strong><small>${items.filter((item) => item.type === "entrada").length} lançamento(ões) no período</small></article>`,
+      `<article class="transaction-metric transaction-metric--expense"><span class="eyebrow">SAÍDAS</span><strong>${formatShortCurrency(expense)}</strong><small>${items.filter((item) => item.type === "saida").length} lançamento(ões) no período</small></article>`
+    ].join("");
     const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
     $("#transactionTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th></th></tr></thead><tbody>${items.map((item) => {
       const transfer = item.transferId ? transferById(item.transferId) : null;

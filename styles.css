@@ -123,6 +123,11 @@ h1, h2, h3, strong { font-family: var(--display); }
 .view-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 25px; margin-bottom: 31px; }
 .intro-actions { display: flex; align-items: center; gap: 9px; }
 .view-intro h1 { margin-top: 10px; color: var(--ink); font-size: clamp(26px, 3vw, 37px); font-weight: 800; letter-spacing: -.055em; }
+.transaction-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: -7px 0 24px; }
+.transaction-metric { min-height: 112px; padding: 17px 20px 15px; border: 1px solid var(--line); border-top: 3px solid var(--green); background: var(--white); box-shadow: var(--shadow); }
+.transaction-metric--expense { border-top-color: var(--red); }
+.transaction-metric strong { display: block; margin-top: 8px; color: var(--ink); font-family: var(--display); font-size: 25px; letter-spacing: -.045em; }
+.transaction-metric small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 .view-lede { max-width: 610px; margin-top: 8px; color: var(--muted); font-size: 14px; }
 
 /* Panels and dashboard */
@@ -344,6 +349,9 @@ h1, h2, h3, strong { font-family: var(--display); }
   .intro-actions { margin-top: 18px; }
   .view-intro .button { margin-top: 18px; }
   .view-intro h1 { font-size: 31px; }
+  .transaction-metrics { gap: 12px; margin-top: 0; }
+  .transaction-metric { min-height: 100px; padding: 14px; }
+  .transaction-metric strong { font-size: 21px; }
   .metric-grid, .metric-grid--three, .analysis-highlights { grid-template-columns: 1fr 1fr; gap: 9px; }
   .metric-card { min-height: 116px; padding: 14px; }
   .metric-value { margin-top: 11px; font-size: 20px; }
