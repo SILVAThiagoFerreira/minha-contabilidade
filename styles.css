@@ -280,9 +280,11 @@ h1, h2, h3, strong { font-family: var(--display); }
 .form-hint { margin: -2px 0 2px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .patrimony-table td:nth-child(5) { max-width: 230px; white-space: normal; }
 .insight-card--patrimony::after { border-color: #d9cce1; }
+.insight-card--aporte::after { border-color: #b7dccb; }
+.insight-card--resgate::after { border-color: #f0c3c8; }
 
 /* Analysis */
-.analysis-highlights { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 15px; margin-bottom: 16px; }
+.analysis-highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 15px; margin-bottom: 16px; }
 .insight-card { position: relative; min-height: 119px; padding: 19px 20px; overflow: hidden; border: 1px solid var(--line); background: var(--white); }
 .insight-card::after { position: absolute; right: -20px; bottom: -34px; width: 115px; height: 115px; border: 1px solid var(--line); content: ""; transform: rotate(45deg); }
 .insight-card .eyebrow { color: var(--muted); }
