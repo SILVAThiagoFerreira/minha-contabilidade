@@ -690,21 +690,23 @@
   function getMonthlySummary(count = 6) {
     return Array.from({ length: count }, (_, index) => {
       const period = shiftMonth(currentPeriod(), index - (count - 1));
-      const items = transactionsForPeriod(period);
+      const items = transactionsForPeriod(period).filter((item) => !item.investmentOperationId);
       const income = sumTransactions(items, "entrada");
       const expense = sumTransactions(items, "saida");
-      return { period, income, expense, result: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
+      return { period, income, expense, result: income - expense, rate: income ? (income - expense) / income * 100 : 0, ...investmentFlowForPeriod(period) };
     });
   }
 
   function renderAnalyses() {
     const months = getMonthlySummary();
     const periodItems = transactionsForPeriod();
-    const expenseItems = periodItems.filter((item) => item.type === "saida" && !item.transferId);
+    const expenseItems = periodItems.filter((item) => item.type === "saida" && !item.transferId && !item.investmentOperationId);
     const grouped = expenseItems.reduce((map, item) => { map[item.category] = (map[item.category] || 0) + toAmount(item.amount); return map; }, {});
     const topCategory = Object.entries(grouped).sort((a, b) => b[1] - a[1])[0];
     const selectedMonth = months[months.length - 1];
     const savings = selectedMonth.income ? Math.round(selectedMonth.rate) : 0;
+    const investmentRelation = selectedMonth.aportes ? `${Math.round(selectedMonth.resgates / selectedMonth.aportes * 100)}% dos aportes` : selectedMonth.resgates ? "resgates sem aporte no mês" : "sem movimentação no mês";
+    const investmentNetLabel = selectedMonth.net >= 0 ? `aplicação líquida de ${formatCurrency(selectedMonth.net)}` : `resgate líquido de ${formatCurrency(Math.abs(selectedMonth.net))}`;
     const invested = totalInvested();
     const investmentValue = totalInvestmentValue();
     const declaredPatrimony = totalPatrimony();
@@ -712,6 +714,9 @@
     const netWorth = totalBalance() + investmentValue + declaredPatrimony - debt;
     $("#analysisHighlights").innerHTML = [
       `<article class="insight-card"><p class="eyebrow">TAXA DE SOBRA</p><h3>${savings}%</h3><p>do que entrou em ${monthLabel(selectedMonth.period)} ficou no caixa.</p></article>`,
+      `<article class="insight-card insight-card--aporte"><p class="eyebrow">APORTE DO MÊS</p><h3>${formatShortCurrency(selectedMonth.aportes)}</h3><p>${selectedMonth.count} movimentação(ões) em investimentos.</p></article>`,
+      `<article class="insight-card insight-card--resgate"><p class="eyebrow">RESGATE DO MÊS</p><h3>${formatShortCurrency(selectedMonth.resgates)}</h3><p>${investmentRelation} retornaram ao caixa.</p></article>`,
+      `<article class="insight-card"><p class="eyebrow">APORTE X RESGATE</p><h3>${formatShortCurrency(selectedMonth.net)}</h3><p>${investmentNetLabel} em ${monthLabel(selectedMonth.period)}.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">MAIOR CATEGORIA</p><h3>${topCategory ? escapeHtml(topCategory[0]) : "—"}</h3><p>${topCategory ? `${formatCurrency(topCategory[1])} em saídas no período.` : "Cadastre saídas para descobrir."}</p></article>`,
       `<article class="insight-card"><p class="eyebrow">TOTAL INVESTIDO</p><h3>${formatShortCurrency(invested)}</h3><p>${vault.investments.length} posição(ões) entre seus investimentos.</p></article>`,
       `<article class="insight-card insight-card--patrimony"><p class="eyebrow">BENS DECLARADOS</p><h3>${formatShortCurrency(declaredPatrimony)}</h3><p>${vault.patrimony.length} item(ns) fora das contas e investimentos.</p></article>`,
@@ -724,6 +729,7 @@
     $("#analysisCategories").innerHTML = categories.length ? categories.map(([category, amount]) => `<div class="analysis-category"><span>${escapeHtml(category)}</span><div class="analysis-track"><span style="width:${totalExpense ? amount / totalExpense * 100 : 0}%"></span></div><strong>${formatShortCurrency(amount)}</strong></div>`).join("") : `<div class="empty-state"><strong>Sem categorias ainda.</strong><span>Os pesos aparecerão com seus lançamentos.</span></div>`;
     renderInvestmentAnalysis();
     renderPatrimonyAnalysis();
+    $("#analysisInvestmentFlow").innerHTML = `<table class="data-table"><thead><tr><th>MÊS</th><th>APORTE</th><th>RESGATE</th><th>LÍQUIDO INVESTIDO</th><th>RELAÇÃO</th></tr></thead><tbody>${months.map((item) => `<tr><td><strong>${monthLabel(item.period)}</strong></td><td class="number positive-number">${formatCurrency(item.aportes)}</td><td class="number negative-number">${formatCurrency(item.resgates)}</td><td class="number ${item.net >= 0 ? "positive-number" : "negative-number"}">${formatCurrency(item.net)}</td><td class="number">${item.aportes ? `${Math.round(item.resgates / item.aportes * 100)}%` : item.resgates ? "resgate sem aporte" : "—"}</td></tr>`).join("")}</tbody></table>`;
     $("#analysisTable").innerHTML = `<table class="data-table"><thead><tr><th>MÊS</th><th>ENTRADAS</th><th>SAÍDAS</th><th>RESULTADO</th><th>TAXA DE SOBRA</th></tr></thead><tbody>${months.map((item) => `<tr><td><strong>${monthLabel(item.period)}</strong></td><td class="number positive-number">${formatCurrency(item.income)}</td><td class="number negative-number">${formatCurrency(item.expense)}</td><td class="number ${item.result >= 0 ? "positive-number" : "negative-number"}">${formatCurrency(item.result)}</td><td class="number">${item.income ? `${Math.round(item.rate)}%` : "—"}</td></tr>`).join("")}</tbody></table>`;
   }
 
@@ -748,6 +754,19 @@
   function investmentOperationType(transaction) {
     const operation = vault.investments.flatMap((item) => Array.isArray(item.operations) ? item.operations : []).find((item) => item.id === transaction.investmentOperationId);
     return operation?.type || (transaction.type === "entrada" ? "resgate" : "aporte");
+  }
+
+  function investmentTransactionsForPeriod(period) {
+    return vault.transactions.filter((item) => item.investmentOperationId && !item.transferId && String(item.date || "").startsWith(period));
+  }
+
+  function investmentFlowForPeriod(period) {
+    const items = investmentTransactionsForPeriod(period);
+    const aportes = items.filter((item) => investmentOperationType(item) === "aporte").reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const resgates = items.filter((item) => investmentOperationType(item) === "resgate").reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const net = aportes - resgates;
+    const retention = aportes ? net / aportes * 100 : resgates ? -100 : 0;
+    return { period, aportes, resgates, net, retention, count: items.length };
   }
 
   function reportMonthKeys(items) {
@@ -785,7 +804,9 @@
       const expense = items.filter((item) => item.type === "saida").reduce((sum, item) => sum + toAmount(item.amount), 0);
       const aportes = investmentItems.filter((item) => investmentOperationType(item) === "aporte").reduce((sum, item) => sum + toAmount(item.amount), 0);
       const resgates = investmentItems.filter((item) => investmentOperationType(item) === "resgate").reduce((sum, item) => sum + toAmount(item.amount), 0);
-      return { ...month, income, expense, aportes, resgates, transfers: transfers.reduce((sum, item) => sum + toAmount(item.amount), 0), result: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
+      const aporteCount = investmentItems.filter((item) => investmentOperationType(item) === "aporte").length;
+      const resgateCount = investmentItems.filter((item) => investmentOperationType(item) === "resgate").length;
+      return { ...month, income, expense, aportes, resgates, aporteCount, resgateCount, netInvestment: aportes - resgates, investmentRate: income ? aportes / income * 100 : 0, transfers: transfers.reduce((sum, item) => sum + toAmount(item.amount), 0), result: income - expense, rate: income ? (income - expense) / income * 100 : 0 };
     });
     const monthsWithIncome = reportMonths.filter((item) => item.income > 0);
     const positiveMonths = reportMonths.filter((item) => item.result > 0).length;
@@ -803,6 +824,9 @@
     const currentAgenda = fixedCostStats(currentPeriod());
     const recurringExpenseTotal = activeFixed.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const currentMonth = reportMonths[reportMonths.length - 1];
+    const totalAportes = reportMonths.reduce((sum, item) => sum + item.aportes, 0);
+    const totalResgates = reportMonths.reduce((sum, item) => sum + item.resgates, 0);
+    const monthsWithRescuePressure = reportMonths.filter((item) => item.resgates > item.aportes && item.resgates > 0);
     const rawData = normalizeVault(vault);
 
     add("RELATÓRIO FINANCEIRO AVANÇADO PARA ANÁLISE POR IA");
@@ -826,8 +850,10 @@
     addKeyValue("Entradas operacionais acumuladas", reportMoney(incomeTotal));
     addKeyValue("Saídas operacionais acumuladas", reportMoney(expenseTotal));
     addKeyValue("Resultado operacional acumulado", reportMoney(resultTotal));
-    addKeyValue("Aportes em investimentos", reportMoney(reportMonths.reduce((sum, item) => sum + item.aportes, 0)));
-    addKeyValue("Resgates de investimentos", reportMoney(reportMonths.reduce((sum, item) => sum + item.resgates, 0)));
+    addKeyValue("Aportes em investimentos", reportMoney(totalAportes));
+    addKeyValue("Resgates de investimentos", reportMoney(totalResgates));
+    addKeyValue("Investimento líquido no histórico", reportMoney(totalAportes - totalResgates));
+    addKeyValue("Resgates sobre aportes", totalAportes ? reportPercent(totalResgates / totalAportes * 100) : totalResgates ? "resgates sem aportes registrados" : "sem movimentação registrada");
     addKeyValue("Transferências internas", reportMoney(vault.transfers.reduce((sum, item) => sum + toAmount(item.amount), 0)));
     addKeyValue("Saldo calculado nas contas", reportMoney(totalBalance()));
     addKeyValue("Valor atual dos investimentos", reportMoney(totalInvestmentValue()));
@@ -854,14 +880,35 @@
     if (totalDebt() > accountAssets) add("- Alerta patrimonial: as dívidas ativas superam os ativos calculados; priorizar uma visão de liquidez e vencimentos.");
     if (currentAgenda.pending > 0) add(`- Agenda do período selecionado: ${reportMoney(currentAgenda.pending)} em custos fixos ainda não marcados como pagos.`);
     if (expenseTotal > incomeTotal && incomes.length) add("- Alerta de fluxo: as saídas acumuladas superam as entradas acumuladas nos lançamentos registrados.");
+    if (monthsWithRescuePressure.length) add(`- Atenção aos resgates: ${monthsWithRescuePressure.length} mês(es) tiveram resgates maiores que aportes, o que pode indicar uso da carteira para cobrir caixa ou realocação patrimonial.`);
+    if (incomeTotal > 0 && totalAportes > 0) add(`- Taxa de investimento sobre entradas operacionais no histórico: ${reportPercent(totalAportes / incomeTotal * 100)}. Compare com a taxa de sobra para entender se os aportes cabem no fluxo.`);
     if (!transactions.length) add("- Não há lançamentos; qualquer recomendação deve começar por organizar a coleta de entradas, saídas e datas.");
     add("- Esses insights são alertas exploratórios, não diagnóstico financeiro; a IA deve pedir confirmação quando houver contexto ausente.");
 
     heading("4. EVOLUÇÃO MENSAL — HISTÓRICO COMPLETO");
-    add("mês | entradas_operacionais | saídas_operacionais | aportes | resgates | transferências | resultado_operacional | taxa_de_sobra");
-    reportMonths.forEach((item) => add(`${item.period} | ${reportMoney(item.income)} | ${reportMoney(item.expense)} | ${reportMoney(item.aportes)} | ${reportMoney(item.resgates)} | ${reportMoney(item.transfers)} | ${reportMoney(item.result)} | ${item.income ? reportPercent(item.rate) : "não informado"}`));
+    add("mês | entradas_operacionais | saídas_operacionais | aportes | resgates | aporte_liquido | resgates_sobre_aportes | transferências | resultado_operacional | taxa_de_sobra");
+    reportMonths.forEach((item) => add(`${item.period} | ${reportMoney(item.income)} | ${reportMoney(item.expense)} | ${reportMoney(item.aportes)} | ${reportMoney(item.resgates)} | ${reportMoney(item.netInvestment)} | ${item.aportes ? reportPercent(item.resgates / item.aportes * 100) : item.resgates ? "resgate sem aporte" : "não informado"} | ${reportMoney(item.transfers)} | ${reportMoney(item.result)} | ${item.income ? reportPercent(item.rate) : "não informado"}`));
 
-    heading("5. SAÍDAS POR CATEGORIA");
+    heading("5. FLUXO MENSAL DE INVESTIMENTOS");
+    add("mês | aportou | resgatou | aporte_liquido | relação_aportes_vs_resgates | taxa_de_investimento_sobre_entradas | operações_de_aporte | operações_de_resgate | observação");
+    reportMonths.forEach((item) => {
+      const relation = item.resgates ? `${(item.aportes / item.resgates).toFixed(2).replace(".", ",")} para 1` : item.aportes ? "aportes sem resgates" : "sem aportes e resgates";
+      const note = item.netInvestment > 0 ? "investimento líquido positivo" : item.netInvestment < 0 ? "resgate líquido no mês" : item.aportes || item.resgates ? "aportes e resgates se compensaram" : "sem movimentação registrada";
+      add(`${item.period} | ${reportMoney(item.aportes)} | ${reportMoney(item.resgates)} | ${reportMoney(item.netInvestment)} | ${relation} | ${item.income ? reportPercent(item.investmentRate) : "sem entradas operacionais"} | ${item.aporteCount} | ${item.resgateCount} | ${note}`);
+    });
+    add("Nota: o capital inicial informado ao cadastrar uma posição não é tratado como aporte mensal; entram aqui apenas movimentações registradas pelo botão Aporte ou Resgatar.");
+
+    heading("6. DIAGNÓSTICO DA VIDA FINANCEIRA");
+    addKeyValue("Ativos líquidos em contas", reportMoney(totalBalance()));
+    addKeyValue("Ativos em investimentos", reportMoney(totalInvestmentValue()));
+    addKeyValue("Bens declarados não líquidos", reportMoney(totalPatrimony()));
+    addKeyValue("Dívidas ativas", reportMoney(totalDebt()));
+    addKeyValue("Compromissos fixos mensais", reportMoney(recurringExpenseTotal));
+    addKeyValue("Parcelas mensais de dívidas", reportMoney(vault.debts.filter((item) => item.active !== false).reduce((sum, item) => sum + toAmount(item.installment), 0)));
+    addKeyValue("Meses com resgate líquido", monthsWithRescuePressure.length);
+    add("Leitura sugerida para a IA: separar dinheiro disponível, investimentos resgatáveis, bens declarados e dívidas antes de recomendar cortes, aportes ou amortizações.");
+
+    heading("7. SAÍDAS POR CATEGORIA");
     add("categoria | total | participação nas saídas | quantidade de lançamentos");
     rankedCategories.forEach(([category, amount]) => {
       const count = expenses.filter((item) => (item.category || UNAVAILABLE_CATEGORY) === category).length;
@@ -869,55 +916,57 @@
     });
     if (!rankedCategories.length) add("não informado");
 
-    heading("6. CONTAS E LIQUIDEZ");
+    heading("8. CONTAS E LIQUIDEZ");
     add("conta | tipo | saldo inicial informado | saldo calculado | quantidade de movimentos");
     vault.accounts.forEach((account) => add(`${reportText(account.name)} | ${account.type === "poupanca" ? "poupança" : "conta corrente"} | ${reportMoney(account.balance)} | ${reportMoney(accountBalance(account.id))} | ${vault.transactions.filter((item) => item.accountId === account.id).length}`));
     if (!vault.accounts.length) add("não informado");
 
-    heading("7. CUSTOS FIXOS E AGENDA");
+    heading("9. CUSTOS FIXOS E AGENDA");
     add("custo | categoria | valor mensal | vencimento | conta | ativo");
     activeFixed.forEach((item) => add(`${reportText(item.name)} | ${reportText(item.category)} | ${reportMoney(item.amount)} | dia ${reportText(item.dueDay)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | sim`));
     add(`Agenda de ${currentPeriod()}: previsto ${reportMoney(currentAgenda.total)} | marcado como pago ${reportMoney(currentAgenda.paid)} | a pagar ${reportMoney(currentAgenda.pending)}`);
     if (!activeFixed.length) add("não informado");
 
-    heading("8. DÍVIDAS");
+    heading("10. DÍVIDAS");
     add("dívida | saldo | parcela | vencimento | conta | status | observação");
     vault.debts.filter((item) => item.active !== false).forEach((item) => add(`${reportText(item.name)} | ${reportMoney(item.balance)} | ${reportMoney(item.installment)} | dia ${reportText(item.dueDay)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ativa | ${reportText(item.notes)}`));
     if (!vault.debts.filter((item) => item.active !== false).length) add("não informado");
 
-    heading("9. INVESTIMENTOS");
+    heading("11. INVESTIMENTOS");
     add("investimento | tipo | capital | rendimento informado | valor atual | taxa | vencimento | histórico");
-    vault.investments.forEach((item) => add(`${reportText(item.name)} | ${reportText(investmentTypeLabel(item.type))} | ${reportMoney(item.principal)} | ${reportMoney(investmentYield(item))} | ${reportMoney(investmentCurrentValue(item))} | ${reportText(item.rate)} ${reportText(item.rateType)} | ${reportText(item.dueDate)} | ${item.operations?.length || 0} operação(ões)`));
+    vault.investments.forEach((item) => add(`${reportText(item.name)} | ${reportText(investmentTypeLabel(item.type))} | ${reportMoney(item.principal)} | ${reportMoney(investmentYield(item))} | ${reportMoney(investmentCurrentValue(item))} | ${reportText(item.rate)} ${reportText(item.rateType)} | ${formatDate(item.maturityAt || item.dueDate)} | ${item.operations?.length || 0} operação(ões)`));
     if (!vault.investments.length) add("não informado");
 
-    heading("10. PATRIMÔNIO DECLARADO");
+    heading("12. PATRIMÔNIO DECLARADO");
     add("bem | tipo | valor atual | data de referência | observação");
     vault.patrimony.filter((item) => item.active !== false).forEach((item) => add(`${reportText(item.name)} | ${reportText(patrimonyTypeLabel(item.type))} | ${reportMoney(item.currentValue)} | ${formatDate(item.referenceDate)} | ${reportText(item.notes)}`));
     if (!vault.patrimony.filter((item) => item.active !== false).length) add("não informado");
 
-    heading("11. TRANSFERÊNCIAS INTERNAS");
+    heading("13. TRANSFERÊNCIAS INTERNAS");
     add("data | origem | destino | valor | observação");
     vault.transfers.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).forEach((item) => add(`${formatDate(item.date)} | ${reportText(vault.accounts.find((account) => account.id === (item.sourceAccountId || item.fromAccountId))?.name)} | ${reportText(vault.accounts.find((account) => account.id === (item.destinationAccountId || item.toAccountId))?.name)} | ${reportMoney(item.amount)} | ${reportText(item.notes)}`));
     if (!vault.transfers.length) add("não informado");
 
-    heading("12. POUPANÇA");
+    heading("14. POUPANÇA");
     add("conta | taxa mensal informada | rendimento manual | data de referência | observação");
     vault.savings.forEach((item) => add(`${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ${reportText(item.monthlyRate)}% | ${item.manualYield === null || item.manualYield === undefined ? "estimado pelo sistema" : reportMoney(item.manualYield)} | ${formatDate(item.referenceDate)} | ${reportText(item.correctionNote)}`));
     if (!vault.savings.length) add("não informado");
 
-    heading("13. LANÇAMENTOS DETALHADOS");
+    heading("15. LANÇAMENTOS DETALHADOS");
     add("id | data | tipo | categoria | descrição | valor | conta | transferência | investimento/operação | recorrente | observação");
     transactions.forEach((item) => add(`${reportText(item.id)} | ${formatDate(item.date)} | ${reportText(item.type)} | ${reportText(item.category)} | ${reportText(item.description)} | ${reportMoney(item.amount)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ${reportText(item.transferId)} | ${reportText(item.investmentId || item.investmentOperationId)} | ${item.recurring ? "sim" : "não"} | ${reportText(item.notes)}`));
     if (!transactions.length) add("não informado");
 
-    heading("14. PERGUNTAS PARA A IA INVESTIGAR");
+    heading("16. PERGUNTAS PARA A IA INVESTIGAR");
     add("1. Quais categorias concentram as maiores saídas e quais têm comportamento recorrente, sazonal ou pontual?");
     add("2. O fluxo de caixa suporta os custos fixos e parcelas atuais? Em quais meses há maior risco de aperto?");
     add("3. Quais lançamentos parecem duplicados, fora do padrão ou sem contexto suficiente para uma decisão?");
     add("4. Como o patrimônio líquido e a liquidez evoluem quando separam contas, investimentos, patrimônio e dívidas?");
     add("5. Quais três ações de baixo risco e alto impacto podem melhorar o próximo mês, deixando claro o dado que sustenta cada uma?");
+    add("6. Os aportes mensais são compatíveis com a renda operacional ou estão pressionando o caixa?");
+    add("7. Os resgates parecem pontuais, realocações ou sinais de que o orçamento está exigindo retirada da carteira?");
 
-    heading("15. DADOS BRUTOS EM JSON");
+    heading("17. DADOS BRUTOS EM JSON");
     add(JSON.stringify(rawData, null, 2));
     return `${lines.join("\n").trim()}\n`;
   }

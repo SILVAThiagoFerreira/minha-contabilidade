@@ -40,7 +40,7 @@ Se aparecer `O backend online ainda está desatualizado`, a interface publicada 
 
 ## Relatório para IA
 
-Na tela `Análises`, `Exportar relatório TXT` baixa um arquivo UTF-8 com contexto e cobertura, resumo executivo, evolução mensal, categorias, liquidez por conta, custos fixos, dívidas, investimentos, patrimônio, transferências, poupança, lançamentos detalhados, alertas derivados, perguntas de investigação e o cofre em JSON no final. O relatório não consulta cotações externas nem inventa valores: deixa explícitas as limitações e diferencia fatos registrados de interpretações sugeridas.
+Na tela `Análises`, `Exportar relatório TXT` baixa um arquivo UTF-8 com contexto e cobertura, resumo executivo, evolução mensal, fluxo mensal de investimentos, diagnóstico da vida financeira, categorias, liquidez por conta, custos fixos, dívidas, investimentos, patrimônio, transferências, poupança, lançamentos detalhados, alertas derivados, perguntas de investigação e o cofre em JSON no final. O relatório não consulta cotações externas nem inventa valores: deixa explícitas as limitações e diferencia fatos registrados de interpretações sugeridas.
 
 ## Configuração
 
@@ -51,6 +51,8 @@ Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCR
 O módulo de investimentos trata projeções como estimativas brutas. Para um CDB DI pós-fixado, informe o percentual do CDI e a taxa-base do CDI que deseja usar na simulação; o sistema calcula a taxa equivalente e a estimativa mensal. Para os demais investimentos, é possível usar taxa prefixada, taxa manual ou deixar a projeção desativada. Nenhuma taxa de mercado é inventada ou atualizada automaticamente.
 
 Ao cadastrar um investimento, a conta/banco é escolhida entre as contas existentes. Investimentos antigos no formato CDB continuam compatíveis e aparecem na nova aba “Investimentos”; a edição permite completar a conta e o CDI-base sem recriar a posição. Na carteira, use “Aporte” para aplicar mais na mesma posição, “Resgatar” para retirar parte ou todo o valor disponível e “Rendimento” para informar um rendimento conferido no extrato. Cada movimentação fica registrada dentro do investimento; aportes e resgates também criam o lançamento correspondente na conta escolhida, sem apagar o cadastro original.
+
+Na aba `Análises`, os blocos de aporte do mês, resgate do mês e aporte x resgate usam apenas as movimentações registradas pelos botões `Aporte` e `Resgatar`. O capital inicial informado ao cadastrar uma posição representa o valor já declarado da carteira e não é tratado automaticamente como aporte mensal, evitando transformar posição antiga em fluxo novo.
 
 ## Dívidas
 
