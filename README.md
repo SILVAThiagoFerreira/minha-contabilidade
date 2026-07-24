@@ -16,12 +16,12 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - gerenciamento de poupança com estimativa mensal e correção manual pelo extrato;
 - custos fixos ativos ou pausados;
 - agenda mensal dos custos fixos, com referência de concluído e indicadores de total, pago e a pagar;
-- dívidas com saldo atual, parcela, vencimento, conta de pagamento e edição;
+- dívidas com credor, saldo atual, parcela mensal, vencimento, conta de pagamento e edição;
 - módulo de investimentos com CDB, Tesouro, fundos, ações, ETFs, LCI/LCA e outros;
 - módulo de patrimônio para informar o valor atual de casa, carro, terra e outros bens, separado das contas e dos investimentos;
 - projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
 - análises mensais, categorias, composição patrimonial e taxa de sobra;
-- relatório financeiro avançado em TXT UTF-8, com salários declarados para referência, dados brutos, métricas, padrões, alertas e perguntas prontas para uma IA;
+- relatório financeiro avançado em TXT UTF-8, com salários declarados para referência, dados brutos, métricas, campos auxiliares para imposto de renda, padrões, alertas e perguntas prontas para uma IA;
 - workflow de GitHub Pages.
 
 As categorias de lançamentos não usam mais a opção genérica “Outros”. Quando um lançamento antigo ainda contém esse valor, ele é exibido e salvo como “Categoria não disponível no sistema”, para deixar claro que a descrição precisa ser conferida sem apagar o registro.
@@ -42,6 +42,8 @@ Se aparecer `O backend online ainda está desatualizado`, a interface publicada 
 
 Na tela `Análises`, `Exportar relatório TXT` baixa um arquivo UTF-8 com contexto e cobertura, salário mensal de carteira de trabalho, salário mensal médio com horas extras, resumo executivo, evolução mensal, fluxo mensal de investimentos, diagnóstico da vida financeira, categorias, liquidez por conta, custos fixos, dívidas, investimentos, patrimônio, transferências, poupança, lançamentos detalhados, alertas derivados, perguntas de investigação e o cofre em JSON no final. Os salários informados no perfil são apenas referências declaradas para análise e relatório: não criam lançamento, não alteram saldo, não entram como receita automática e não mudam a taxa de sobra. O relatório não consulta cotações externas nem inventa valores: deixa explícitas as limitações e diferencia fatos registrados de interpretações sugeridas.
 
+O relatório também inclui uma seção auxiliar para imposto de renda com os dados declarados que já existem no sistema: credor e saldo/parcela das dívidas, identificação curta das contas, conta ou banco vinculado aos investimentos, data de aplicação, vencimento, liquidez e movimentações de aporte, resgate ou rendimento. Essa seção serve como checklist para conferência com informes oficiais, não como declaração pronta.
+
 ## Configuração
 
 Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar.
@@ -56,7 +58,7 @@ Na aba `Análises`, os blocos de aporte do mês, resgate do mês e aporte x resg
 
 ## Dívidas
 
-Dívidas ficam separadas dos custos fixos. O saldo atual entra no cálculo do patrimônio líquido, enquanto a parcela mensal aparece como compromisso. Uma dívida pode ser editada, pausada ou excluída, e a conta de pagamento é escolhida entre as contas cadastradas.
+Dívidas ficam separadas dos custos fixos. O saldo atual entra no cálculo do patrimônio líquido, enquanto a parcela mensal aparece como compromisso. Esses dois campos são independentes: editar o saldo atual altera o total de dívidas, e editar a parcela mensal altera apenas o total de parcelas mensais. Uma dívida pode ser editada, pausada ou excluída, e a conta de pagamento é escolhida entre as contas cadastradas.
 
 ## Patrimônio declarado
 

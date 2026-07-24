@@ -220,10 +220,36 @@ function jsonPayload_(payload) {
   validateInvestmentOperations_(payload.investments || [], payload.transactions || []);
   validateTransfers_(payload.transfers || [], payload.transactions || [], payload.accounts || []);
   validateFixedCostPayments_(payload.fixedCostPayments || [], payload.fixedCosts || []);
+  validateDebts_(payload.debts || [], payload.accounts || []);
   validatePatrimony_(payload.patrimony || []);
   const text = JSON.stringify(payload);
   if (text.length > MAX_PAYLOAD_CHARS) throw new Error("O cofre ultrapassou o limite seguro da planilha.");
   return text;
+}
+
+function validateDebts_(debts, accounts) {
+  const debtIds = Object.create(null);
+  const accountIds = Object.create(null);
+  (accounts || []).forEach((account) => {
+    if (account && typeof account === "object" && String(account.id || "").trim()) accountIds[String(account.id).trim()] = true;
+  });
+  (debts || []).forEach((debt) => {
+    if (!debt || typeof debt !== "object" || Array.isArray(debt)) throw new Error("Dívida inválida.");
+    const id = String(debt.id || "").trim();
+    const name = String(debt.name || "").trim();
+    const accountId = String(debt.accountId || "").trim();
+    const balance = Number(debt.balance);
+    const installment = debt.installment === undefined || debt.installment === null || debt.installment === "" ? 0 : Number(debt.installment);
+    const dueDay = debt.dueDay === undefined || debt.dueDay === null || debt.dueDay === "" ? null : Number(debt.dueDay);
+    if (!id || debtIds[id]) throw new Error("Cada dívida precisa ter um ID único.");
+    if (!name) throw new Error("Cada dívida precisa ter uma descrição.");
+    if (!isFinite(balance) || balance < 0) throw new Error("O saldo atual da dívida precisa ser maior ou igual a zero.");
+    if (!isFinite(installment) || installment < 0) throw new Error("A parcela mensal da dívida precisa ser maior ou igual a zero.");
+    if (dueDay !== null && (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31)) throw new Error("O vencimento da dívida deve ficar entre os dias 1 e 31.");
+    if (accountId && Object.keys(accountIds).length && !accountIds[accountId]) throw new Error("A dívida referencia uma conta inexistente.");
+    if (debt.active !== undefined && typeof debt.active !== "boolean") throw new Error("O status ativo da dívida deve ser booleano.");
+    debtIds[id] = true;
+  });
 }
 
 function validatePatrimony_(items) {
