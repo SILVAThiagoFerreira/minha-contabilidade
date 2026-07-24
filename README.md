@@ -9,7 +9,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - planilha Google como fonte oficial dos dados;
 - histórico append-only na própria planilha, com revisões anteriores preservadas;
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
-- lançamentos por conta e categoria, com opções específicas como compras online, vestuário, pets, viagens, serviços e impostos;
+- lançamentos por conta e categoria, com opções específicas como compras online, vestuário, pets, viagens, serviços, impostos e salário mensal;
 - transferências entre contas, com saída identificada na origem e entrada correspondente no destino;
 - contas correntes e poupanças por banco;
 - investimentos vinculados diretamente a uma conta já cadastrada;
@@ -21,7 +21,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - módulo de patrimônio para informar o valor atual de casa, carro, terra e outros bens, separado das contas e dos investimentos;
 - projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
 - análises mensais, categorias, composição patrimonial e taxa de sobra;
-- relatório financeiro avançado em TXT UTF-8, com dados brutos, métricas, padrões, alertas e perguntas prontas para uma IA;
+- relatório financeiro avançado em TXT UTF-8, com salário mensal declarado, dados brutos, métricas, padrões, alertas e perguntas prontas para uma IA;
 - workflow de GitHub Pages.
 
 As categorias de lançamentos não usam mais a opção genérica “Outros”. Quando um lançamento antigo ainda contém esse valor, ele é exibido e salvo como “Categoria não disponível no sistema”, para deixar claro que a descrição precisa ser conferida sem apagar o registro.
@@ -40,7 +40,7 @@ Se aparecer `O backend online ainda está desatualizado`, a interface publicada 
 
 ## Relatório para IA
 
-Na tela `Análises`, `Exportar relatório TXT` baixa um arquivo UTF-8 com contexto e cobertura, resumo executivo, evolução mensal, fluxo mensal de investimentos, diagnóstico da vida financeira, categorias, liquidez por conta, custos fixos, dívidas, investimentos, patrimônio, transferências, poupança, lançamentos detalhados, alertas derivados, perguntas de investigação e o cofre em JSON no final. O relatório não consulta cotações externas nem inventa valores: deixa explícitas as limitações e diferencia fatos registrados de interpretações sugeridas.
+Na tela `Análises`, `Exportar relatório TXT` baixa um arquivo UTF-8 com contexto e cobertura, salário mensal informado no perfil, resumo executivo, evolução mensal, fluxo mensal de investimentos, diagnóstico da vida financeira, categorias, liquidez por conta, custos fixos, dívidas, investimentos, patrimônio, transferências, poupança, lançamentos detalhados, alertas derivados, perguntas de investigação e o cofre em JSON no final. O salário mensal é apenas uma referência declarada para o relatório: não cria lançamento, não altera saldo, não entra como receita automática e não muda a taxa de sobra. O relatório não consulta cotações externas nem inventa valores: deixa explícitas as limitações e diferencia fatos registrados de interpretações sugeridas.
 
 ## Configuração
 

@@ -32,10 +32,12 @@
     "Impostos e taxas",
     "Serviços",
     "Doações",
+    "Salário mensal",
     "Renda",
     "Investimentos",
     UNAVAILABLE_CATEGORY
   ];
+  const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => category !== "Salário mensal");
   const CATEGORY_COLORS = ["#b6dcca", "#f3afb5", "#f3c885", "#b9cada", "#c9b9dc", "#a9cdd0", "#f0c3a0", "#d2d89e"];
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -95,7 +97,8 @@
       "#fixedCostForm [name='amount']",
       "#cdbForm [name='principal']",
       "#investmentOperationAmount",
-      "#patrimonyForm [name='currentValue']"
+      "#patrimonyForm [name='currentValue']",
+      "#profileForm [name='monthlySalary']"
     ];
     $$(selectors.join(",")).forEach((input) => {
       input.type = "text";
@@ -146,7 +149,7 @@
   function blankVault(displayName = "") {
     return {
       version: 1,
-      profile: { displayName, currency: "BRL" },
+      profile: { displayName, currency: "BRL", monthlySalary: 0 },
       accounts: [],
       debts: [],
       transactions: [],
@@ -169,6 +172,7 @@
   function normalizeVault(value) {
     const normalized = { ...blankVault(), ...(value || {}) };
     normalized.profile = { ...blankVault().profile, ...(value?.profile || {}) };
+    normalized.profile.monthlySalary = toAmount(normalized.profile.monthlySalary);
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
     normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
     normalized.transactions = Array.isArray(value?.transactions)
@@ -343,7 +347,7 @@
     const linkedAccounts = vault.accounts.map((account) => ({ value: account.id, label: `${account.name} · ${account.type === "poupanca" ? "Poupança" : "Conta corrente"}` }));
     const savingsAccounts = vault.accounts.filter((account) => account.type === "poupanca").map((account) => ({ value: account.id, label: `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` }));
     populateSelect($("#transactionCategory"), CATEGORIES.map((category) => ({ value: category, label: category })), $("#transactionCategory")?.value || "Alimentação");
-    populateSelect($("#fixedCostCategory"), CATEGORIES.map((category) => ({ value: category, label: category })), $("#fixedCostCategory")?.value || "Moradia");
+    populateSelect($("#fixedCostCategory"), FIXED_COST_CATEGORIES.map((category) => ({ value: category, label: category })), $("#fixedCostCategory")?.value || "Moradia");
     populateSelect($("#transactionAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transactionAccount")?.value || "");
     populateSelect($("#debtAccount"), [{ value: "", label: "Sem conta definida" }, ...accounts], $("#debtAccount")?.value || "");
     populateSelect($("#transferSourceAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transferSourceAccount")?.value || "");
@@ -836,6 +840,7 @@
 
     heading("1. CONTEXTO E COBERTURA");
     addKeyValue("Perfil", vault.profile.displayName || session?.username || "não informado");
+    addKeyValue("Salário mensal informado para referência", reportMoney(vault.profile.monthlySalary));
     addKeyValue("Período dos lançamentos", reportDateRange(transactions));
     addKeyValue("Quantidade de lançamentos", transactions.length);
     addKeyValue("Quantidade de transferências internas", vault.transfers.length);
@@ -848,6 +853,7 @@
 
     heading("2. RESUMO EXECUTIVO");
     addKeyValue("Entradas operacionais acumuladas", reportMoney(incomeTotal));
+    addKeyValue("Salário mensal cadastral", reportMoney(vault.profile.monthlySalary));
     addKeyValue("Saídas operacionais acumuladas", reportMoney(expenseTotal));
     addKeyValue("Resultado operacional acumulado", reportMoney(resultTotal));
     addKeyValue("Aportes em investimentos", reportMoney(totalAportes));
@@ -1008,6 +1014,7 @@
 
   function renderSettings() {
     $("#profileDisplayName").value = vault.profile.displayName || "";
+    setMoneyInputValue($("#profileMonthlySalary"), vault.profile.monthlySalary);
     $("#storageTitle").textContent = "Planilha sincronizada";
     $("#storagePill").textContent = "ONLINE";
     $("#storageDescription").textContent = "Os lançamentos são gravados na planilha e recebem uma revisão permanente no histórico online.";
@@ -1531,6 +1538,7 @@
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
     vault.profile.displayName = data.displayName.trim();
+    vault.profile.monthlySalary = toAmount(data.monthlySalary);
     await saveCurrentVault();
     enterApp();
     showToast("Perfil atualizado.");
