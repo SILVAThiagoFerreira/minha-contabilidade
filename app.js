@@ -478,6 +478,12 @@
     return vault.accounts.find((account) => account.id === accountId);
   }
 
+  function accountReportLabel(accountId, fallback = "não informado") {
+    const account = accountById(accountId);
+    if (!account) return fallback || "não informado";
+    return `${account.name}${account.nickname ? ` (${account.nickname})` : ""}`;
+  }
+
   function savingsConfig(accountId) {
     return vault.savings.find((item) => item.accountId === accountId);
   }
@@ -647,10 +653,10 @@
     const active = vault.debts.filter((item) => item.active !== false);
     const balance = active.reduce((sum, item) => sum + toAmount(item.balance), 0);
     const installments = active.reduce((sum, item) => sum + toAmount(item.installment), 0);
-    $("#debtMetrics").innerHTML = [metricCard("SALDO DE DÍVIDAS", formatShortCurrency(balance), active.length ? `${active.length} compromisso(s) ativo(s)` : "nenhuma dívida cadastrada", "metric-card--warning"), metricCard("PARCELAS MENSAIS", formatShortCurrency(installments), "valor informado por mês", "metric-card--accent"), metricCard("MÉDIA POR DÍVIDA", formatShortCurrency(active.length ? balance / active.length : 0), active.length ? "saldo atual médio" : "cadastre uma dívida", "")].join("");
+    $("#debtMetrics").innerHTML = [metricCard("SALDO DE DÍVIDAS", formatShortCurrency(balance), active.length ? `${active.length} compromisso(s) ativo(s)` : "nenhuma dívida cadastrada", "metric-card--warning"), metricCard("PARCELAS MENSAIS", formatShortCurrency(installments), "soma das parcelas; não é saldo", "metric-card--accent"), metricCard("MÉDIA POR DÍVIDA", formatShortCurrency(active.length ? balance / active.length : 0), active.length ? "saldo atual médio" : "cadastre uma dívida", "")].join("");
     const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
     const items = vault.debts.slice().sort((a, b) => Number(a.dueDay || 99) - Number(b.dueDay || 99));
-    $("#debtTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DÍVIDA</th><th>CREDOR</th><th>SALDO ATUAL</th><th>PARCELA</th><th>VENC.</th><th>CONTA</th><th>STATUS</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.creditor || "—")}</td><td class="number">${formatCurrency(item.balance)}</td><td class="number">${formatCurrency(item.installment)}</td><td>${item.dueDay ? `Dia ${escapeHtml(item.dueDay)}` : "—"}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td><span class="status-pill ${item.active !== false ? "status-pill--green" : "status-pill--muted"}">${item.active !== false ? "ATIVA" : "PAUSADA"}</span></td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-debt" data-id="${item.id}" title="Editar dívida" aria-label="Editar dívida">✎</button><button class="table-action" type="button" data-action="toggle-debt" data-id="${item.id}" title="Ativar ou pausar" aria-label="Ativar ou pausar">↻</button><button class="table-action" type="button" data-action="delete-debt" data-id="${item.id}" title="Excluir dívida" aria-label="Excluir dívida">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhuma dívida cadastrada.</strong><span>Se você tiver parcelas ou saldo devedor, registre aqui para refletir no patrimônio líquido.</span></div>`;
+    $("#debtTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DÍVIDA</th><th>CREDOR</th><th>SALDO ATUAL</th><th>PARCELA MENSAL</th><th>VENC.</th><th>CONTA</th><th>STATUS</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.creditor || "—")}</td><td class="number">${formatCurrency(item.balance)}</td><td class="number">${formatCurrency(item.installment)}</td><td>${item.dueDay ? `Dia ${escapeHtml(item.dueDay)}` : "—"}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td><span class="status-pill ${item.active !== false ? "status-pill--green" : "status-pill--muted"}">${item.active !== false ? "ATIVA" : "PAUSADA"}</span></td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-debt" data-id="${item.id}" title="Editar dívida" aria-label="Editar dívida">✎</button><button class="table-action" type="button" data-action="toggle-debt" data-id="${item.id}" title="Ativar ou pausar" aria-label="Ativar ou pausar">↻</button><button class="table-action" type="button" data-action="delete-debt" data-id="${item.id}" title="Excluir dívida" aria-label="Excluir dívida">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhuma dívida cadastrada.</strong><span>Se você tiver parcelas ou saldo devedor, registre aqui para refletir no patrimônio líquido.</span></div>`;
   }
 
   function renderFixedCosts() {
@@ -926,8 +932,8 @@
     if (!rankedCategories.length) add("não informado");
 
     heading("8. CONTAS E LIQUIDEZ");
-    add("conta | tipo | saldo inicial informado | saldo calculado | quantidade de movimentos");
-    vault.accounts.forEach((account) => add(`${reportText(account.name)} | ${account.type === "poupanca" ? "poupança" : "conta corrente"} | ${reportMoney(account.balance)} | ${reportMoney(accountBalance(account.id))} | ${vault.transactions.filter((item) => item.accountId === account.id).length}`));
+    add("conta | identificação curta | tipo | saldo inicial informado | saldo calculado | quantidade de movimentos");
+    vault.accounts.forEach((account) => add(`${reportText(account.name)} | ${reportText(account.nickname)} | ${account.type === "poupanca" ? "poupança" : "conta corrente"} | ${reportMoney(account.balance)} | ${reportMoney(accountBalance(account.id))} | ${vault.transactions.filter((item) => item.accountId === account.id).length}`));
     if (!vault.accounts.length) add("não informado");
 
     heading("9. CUSTOS FIXOS E AGENDA");
@@ -937,13 +943,13 @@
     if (!activeFixed.length) add("não informado");
 
     heading("10. DÍVIDAS");
-    add("dívida | saldo | parcela | vencimento | conta | status | observação");
-    vault.debts.filter((item) => item.active !== false).forEach((item) => add(`${reportText(item.name)} | ${reportMoney(item.balance)} | ${reportMoney(item.installment)} | dia ${reportText(item.dueDay)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ativa | ${reportText(item.notes)}`));
+    add("dívida | credor | saldo atual declarado | parcela mensal declarada | vencimento | conta de pagamento | status | observação");
+    vault.debts.filter((item) => item.active !== false).forEach((item) => add(`${reportText(item.name)} | ${reportText(item.creditor)} | ${reportMoney(item.balance)} | ${reportMoney(item.installment)} | dia ${reportText(item.dueDay)} | ${reportText(accountReportLabel(item.accountId))} | ativa | ${reportText(item.notes)}`));
     if (!vault.debts.filter((item) => item.active !== false).length) add("não informado");
 
     heading("11. INVESTIMENTOS");
-    add("investimento | tipo | capital | rendimento informado | valor atual | taxa | vencimento | histórico");
-    vault.investments.forEach((item) => add(`${reportText(item.name)} | ${reportText(investmentTypeLabel(item.type))} | ${reportMoney(item.principal)} | ${reportMoney(investmentYield(item))} | ${reportMoney(investmentCurrentValue(item))} | ${reportText(item.rate)} ${reportText(item.rateType)} | ${formatDate(item.maturityAt || item.dueDate)} | ${item.operations?.length || 0} operação(ões)`));
+    add("investimento | tipo | conta/banco vinculado | capital | rendimento informado | valor atual | taxa | aplicação | vencimento | liquidez | histórico");
+    vault.investments.forEach((item) => add(`${reportText(item.name)} | ${reportText(investmentTypeLabel(item.type))} | ${reportText(accountReportLabel(item.accountId, item.bank))} | ${reportMoney(item.principal)} | ${reportMoney(investmentYield(item))} | ${reportMoney(investmentCurrentValue(item))} | ${reportText(item.rate)} ${reportText(item.rateType)} | ${formatDate(item.startedAt)} | ${formatDate(item.maturityAt || item.dueDate)} | ${reportText(item.liquidity)} | ${item.operations?.length || 0} operação(ões)`));
     if (!vault.investments.length) add("não informado");
 
     heading("12. PATRIMÔNIO DECLARADO");
@@ -966,7 +972,23 @@
     transactions.forEach((item) => add(`${reportText(item.id)} | ${formatDate(item.date)} | ${reportText(item.type)} | ${reportText(item.category)} | ${reportText(item.description)} | ${reportMoney(item.amount)} | ${reportText(vault.accounts.find((account) => account.id === item.accountId)?.name)} | ${reportText(item.transferId)} | ${reportText(item.investmentId || item.investmentOperationId)} | ${item.recurring ? "sim" : "não"} | ${reportText(item.notes)}`));
     if (!transactions.length) add("não informado");
 
-    heading("16. PERGUNTAS PARA A IA INVESTIGAR");
+    heading("16. INFORMAÇÕES PARA IMPOSTO DE RENDA - DADOS DECLARADOS");
+    add("Checklist auxiliar com dados já presentes no sistema. Use como referência para conferir informes oficiais, sem tratar como declaração pronta.");
+    add("Dívidas: dívida | credor | saldo_atual_declarado | parcela_mensal_declarada | vencimento | conta_de_pagamento | observação");
+    vault.debts.filter((item) => item.active !== false).forEach((item) => add(`${reportText(item.name)} | ${reportText(item.creditor)} | ${reportMoney(item.balance)} | ${reportMoney(item.installment)} | dia ${reportText(item.dueDay)} | ${reportText(accountReportLabel(item.accountId))} | ${reportText(item.notes)}`));
+    if (!vault.debts.filter((item) => item.active !== false).length) add("Dívidas: não informado");
+    add("Investimentos: investimento | tipo | conta_banco_vinculado | capital_declarado | rendimento_informado | valor_atual | aplicação | vencimento | liquidez | taxa");
+    vault.investments.forEach((item) => add(`${reportText(item.name)} | ${reportText(investmentTypeLabel(item.type))} | ${reportText(accountReportLabel(item.accountId, item.bank))} | ${reportMoney(item.principal)} | ${reportMoney(investmentYield(item))} | ${reportMoney(investmentCurrentValue(item))} | ${formatDate(item.startedAt)} | ${formatDate(item.maturityAt || item.dueDate)} | ${reportText(item.liquidity)} | ${reportText(item.rate)} ${reportText(item.rateType)}`));
+    if (!vault.investments.length) add("Investimentos: não informado");
+    const investmentOperations = vault.investments.flatMap((investment) => (Array.isArray(investment.operations) ? investment.operations : []).map((operation) => ({ investment, operation }))).sort((a, b) => String(a.operation.date || "").localeCompare(String(b.operation.date || "")));
+    add("Movimentações de investimentos: investimento | tipo_movimento | data | valor | conta_movimento | saldo_após | observação");
+    investmentOperations.forEach(({ investment, operation }) => add(`${reportText(investment.name)} | ${reportText(operationLabel(operation.type))} | ${formatDate(operation.date)} | ${reportMoney(operation.amount)} | ${reportText(accountReportLabel(operation.accountId))} | ${reportMoney(operation.balanceAfter)} | ${reportText(operation.note)}`));
+    if (!investmentOperations.length) add("Movimentações de investimentos: não informado");
+    add("Contas: conta | identificação_curta | tipo | saldo_inicial_informado | saldo_calculado");
+    vault.accounts.forEach((account) => add(`${reportText(account.name)} | ${reportText(account.nickname)} | ${account.type === "poupanca" ? "poupança" : "conta corrente"} | ${reportMoney(account.balance)} | ${reportMoney(accountBalance(account.id))}`));
+    if (!vault.accounts.length) add("Contas: não informado");
+
+    heading("17. PERGUNTAS PARA A IA INVESTIGAR");
     add("1. Quais categorias concentram as maiores saídas e quais têm comportamento recorrente, sazonal ou pontual?");
     add("2. O fluxo de caixa suporta os custos fixos e parcelas atuais? Em quais meses há maior risco de aperto?");
     add("3. Quais lançamentos parecem duplicados, fora do padrão ou sem contexto suficiente para uma decisão?");
@@ -975,7 +997,7 @@
     add("6. Os aportes mensais são compatíveis com a renda operacional ou estão pressionando o caixa?");
     add("7. Os resgates parecem pontuais, realocações ou sinais de que o orçamento está exigindo retirada da carteira?");
 
-    heading("17. DADOS BRUTOS EM JSON");
+    heading("18. DADOS BRUTOS EM JSON");
     add(JSON.stringify(rawData, null, 2));
     return `${lines.join("\n").trim()}\n`;
   }
