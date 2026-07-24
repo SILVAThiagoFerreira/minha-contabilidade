@@ -32,12 +32,12 @@
     "Impostos e taxas",
     "Serviços",
     "Doações",
-    "Salário mensal",
+    "Salário mensal (Carteira de trabalho)",
     "Renda",
     "Investimentos",
     UNAVAILABLE_CATEGORY
   ];
-  const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => category !== "Salário mensal");
+  const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => !["Salário mensal", "Salário mensal (Carteira de trabalho)"].includes(category));
   const CATEGORY_COLORS = ["#b6dcca", "#f3afb5", "#f3c885", "#b9cada", "#c9b9dc", "#a9cdd0", "#f0c3a0", "#d2d89e"];
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -98,7 +98,8 @@
       "#cdbForm [name='principal']",
       "#investmentOperationAmount",
       "#patrimonyForm [name='currentValue']",
-      "#profileForm [name='monthlySalary']"
+      "#profileForm [name='monthlySalary']",
+      "#profileForm [name='averageMonthlySalaryWithOvertime']"
     ];
     $$(selectors.join(",")).forEach((input) => {
       input.type = "text";
@@ -149,7 +150,7 @@
   function blankVault(displayName = "") {
     return {
       version: 1,
-      profile: { displayName, currency: "BRL", monthlySalary: 0 },
+      profile: { displayName, currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0 },
       accounts: [],
       debts: [],
       transactions: [],
@@ -166,6 +167,7 @@
 
   function normalizeLaunchCategory(category) {
     const value = String(category || "").trim();
+    if (value === "Salário mensal") return "Salário mensal (Carteira de trabalho)";
     return !value || value.toLowerCase() === "outros" ? UNAVAILABLE_CATEGORY : value;
   }
 
@@ -173,6 +175,7 @@
     const normalized = { ...blankVault(), ...(value || {}) };
     normalized.profile = { ...blankVault().profile, ...(value?.profile || {}) };
     normalized.profile.monthlySalary = toAmount(normalized.profile.monthlySalary);
+    normalized.profile.averageMonthlySalaryWithOvertime = toAmount(normalized.profile.averageMonthlySalaryWithOvertime);
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
     normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
     normalized.transactions = Array.isArray(value?.transactions)
@@ -840,7 +843,8 @@
 
     heading("1. CONTEXTO E COBERTURA");
     addKeyValue("Perfil", vault.profile.displayName || session?.username || "não informado");
-    addKeyValue("Salário mensal informado para referência", reportMoney(vault.profile.monthlySalary));
+    addKeyValue("Salário mensal (Carteira de trabalho) informado para referência", reportMoney(vault.profile.monthlySalary));
+    addKeyValue("Salário Mensal Médio + Horas Extras informado para análise", reportMoney(vault.profile.averageMonthlySalaryWithOvertime));
     addKeyValue("Período dos lançamentos", reportDateRange(transactions));
     addKeyValue("Quantidade de lançamentos", transactions.length);
     addKeyValue("Quantidade de transferências internas", vault.transfers.length);
@@ -853,7 +857,6 @@
 
     heading("2. RESUMO EXECUTIVO");
     addKeyValue("Entradas operacionais acumuladas", reportMoney(incomeTotal));
-    addKeyValue("Salário mensal cadastral", reportMoney(vault.profile.monthlySalary));
     addKeyValue("Saídas operacionais acumuladas", reportMoney(expenseTotal));
     addKeyValue("Resultado operacional acumulado", reportMoney(resultTotal));
     addKeyValue("Aportes em investimentos", reportMoney(totalAportes));
@@ -1015,6 +1018,7 @@
   function renderSettings() {
     $("#profileDisplayName").value = vault.profile.displayName || "";
     setMoneyInputValue($("#profileMonthlySalary"), vault.profile.monthlySalary);
+    setMoneyInputValue($("#profileAverageMonthlySalaryWithOvertime"), vault.profile.averageMonthlySalaryWithOvertime);
     $("#storageTitle").textContent = "Planilha sincronizada";
     $("#storagePill").textContent = "ONLINE";
     $("#storageDescription").textContent = "Os lançamentos são gravados na planilha e recebem uma revisão permanente no histórico online.";
@@ -1539,6 +1543,7 @@
     const data = Object.fromEntries(new FormData(form).entries());
     vault.profile.displayName = data.displayName.trim();
     vault.profile.monthlySalary = toAmount(data.monthlySalary);
+    vault.profile.averageMonthlySalaryWithOvertime = toAmount(data.averageMonthlySalaryWithOvertime);
     await saveCurrentVault();
     enterApp();
     showToast("Perfil atualizado.");

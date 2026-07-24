@@ -196,7 +196,7 @@ function login_(identity) {
 function blankVault_(displayName) {
   return {
     version: 1,
-    profile: { displayName: displayName || "", currency: "BRL", monthlySalary: 0 },
+    profile: { displayName: displayName || "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0 },
     accounts: [],
     debts: [],
     transactions: [],
