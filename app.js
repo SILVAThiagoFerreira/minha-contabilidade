@@ -32,12 +32,19 @@
     "Impostos e taxas",
     "Serviços",
     "Doações",
+    "Salário",
+    "Salário Parte 1",
+    "Salário Parte 2",
     "Salário mensal (Carteira de trabalho)",
+    "Transporte - Manutenção",
+    "Transporte - Combustivel",
     "Renda",
     "Investimentos",
     UNAVAILABLE_CATEGORY
   ];
-  const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => !["Salário mensal", "Salário mensal (Carteira de trabalho)"].includes(category));
+  const SALARY_CATEGORIES = ["Salário", "Salário Parte 1", "Salário Parte 2", "Salário mensal", "Salário mensal (Carteira de trabalho)"];
+  const TRANSPORT_CATEGORIES = ["Transporte", "Transporte - Manutenção", "Transporte - Combustivel"];
+  const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => !SALARY_CATEGORIES.includes(category));
   const CATEGORY_COLORS = ["#b6dcca", "#f3afb5", "#f3c885", "#b9cada", "#c9b9dc", "#a9cdd0", "#f0c3a0", "#d2d89e"];
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -710,8 +717,27 @@
     });
   }
 
+  function categoryGroupTotalForPeriod(period, categories, type) {
+    return transactionsForPeriod(period)
+      .filter((item) => item.type === type && !item.transferId && !item.investmentOperationId && categories.includes(item.category))
+      .reduce((sum, item) => sum + toAmount(item.amount), 0);
+  }
+
+  function essentialMonthlyCosts(count = 6) {
+    return Array.from({ length: count }, (_, index) => {
+      const period = shiftMonth(currentPeriod(), index - (count - 1));
+      return {
+        period,
+        transport: categoryGroupTotalForPeriod(period, TRANSPORT_CATEGORIES, "saida"),
+        food: categoryGroupTotalForPeriod(period, ["Alimentação"], "saida"),
+        salary: categoryGroupTotalForPeriod(period, SALARY_CATEGORIES, "entrada")
+      };
+    });
+  }
+
   function renderAnalyses() {
     const months = getMonthlySummary();
+    const essentialCosts = essentialMonthlyCosts();
     const periodItems = transactionsForPeriod();
     const expenseItems = periodItems.filter((item) => item.type === "saida" && !item.transferId && !item.investmentOperationId);
     const grouped = expenseItems.reduce((map, item) => { map[item.category] = (map[item.category] || 0) + toAmount(item.amount); return map; }, {});
@@ -725,12 +751,16 @@
     const declaredPatrimony = totalPatrimony();
     const debt = totalDebt();
     const netWorth = totalBalance() + investmentValue + declaredPatrimony - debt;
+    const selectedEssentialCosts = essentialCosts[essentialCosts.length - 1];
     $("#analysisHighlights").innerHTML = [
       `<article class="insight-card"><p class="eyebrow">TAXA DE SOBRA</p><h3>${savings}%</h3><p>do que entrou em ${monthLabel(selectedMonth.period)} ficou no caixa.</p></article>`,
       `<article class="insight-card insight-card--aporte"><p class="eyebrow">APORTE DO MÊS</p><h3>${formatShortCurrency(selectedMonth.aportes)}</h3><p>${selectedMonth.count} movimentação(ões) em investimentos.</p></article>`,
       `<article class="insight-card insight-card--resgate"><p class="eyebrow">RESGATE DO MÊS</p><h3>${formatShortCurrency(selectedMonth.resgates)}</h3><p>${investmentRelation} retornaram ao caixa.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">APORTE X RESGATE</p><h3>${formatShortCurrency(selectedMonth.net)}</h3><p>${investmentNetLabel} em ${monthLabel(selectedMonth.period)}.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">MAIOR CATEGORIA</p><h3>${topCategory ? escapeHtml(topCategory[0]) : "—"}</h3><p>${topCategory ? `${formatCurrency(topCategory[1])} em saídas no período.` : "Cadastre saídas para descobrir."}</p></article>`,
+      `<article class="insight-card"><p class="eyebrow">TRANSPORTE NO MÊS</p><h3>${formatShortCurrency(selectedEssentialCosts.transport)}</h3><p>saídas em transporte, manutenção e combustível.</p></article>`,
+      `<article class="insight-card"><p class="eyebrow">ALIMENTAÇÃO NO MÊS</p><h3>${formatShortCurrency(selectedEssentialCosts.food)}</h3><p>saídas classificadas em alimentação.</p></article>`,
+      `<article class="insight-card insight-card--aporte"><p class="eyebrow">SALÁRIOS RECEBIDOS</p><h3>${formatShortCurrency(selectedEssentialCosts.salary)}</h3><p>entradas salariais em ${monthLabel(selectedEssentialCosts.period)}.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">TOTAL INVESTIDO</p><h3>${formatShortCurrency(invested)}</h3><p>${vault.investments.length} posição(ões) entre seus investimentos.</p></article>`,
       `<article class="insight-card insight-card--patrimony"><p class="eyebrow">BENS DECLARADOS</p><h3>${formatShortCurrency(declaredPatrimony)}</h3><p>${vault.patrimony.length} item(ns) fora das contas e investimentos.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">PATRIMÔNIO LÍQUIDO</p><h3>${formatShortCurrency(netWorth)}</h3><p>contas + investimentos + bens − ${formatShortCurrency(debt)} em dívidas.</p></article>`
@@ -740,6 +770,7 @@
     const totalExpense = expenseItems.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const categories = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
     $("#analysisCategories").innerHTML = categories.length ? categories.map(([category, amount]) => `<div class="analysis-category"><span>${escapeHtml(category)}</span><div class="analysis-track"><span style="width:${totalExpense ? amount / totalExpense * 100 : 0}%"></span></div><strong>${formatShortCurrency(amount)}</strong></div>`).join("") : `<div class="empty-state"><strong>Sem categorias ainda.</strong><span>Os pesos aparecerão com seus lançamentos.</span></div>`;
+    $("#analysisEssentialCosts").innerHTML = `<table class="data-table"><thead><tr><th>MÊS</th><th>TRANSPORTE</th><th>ALIMENTAÇÃO</th><th>SALÁRIOS RECEBIDOS</th></tr></thead><tbody>${essentialCosts.map((item) => `<tr><td><strong>${monthLabel(item.period)}</strong></td><td class="number negative-number">${formatCurrency(item.transport)}</td><td class="number negative-number">${formatCurrency(item.food)}</td><td class="number positive-number">${formatCurrency(item.salary)}</td></tr>`).join("")}</tbody></table>`;
     renderInvestmentAnalysis();
     renderPatrimonyAnalysis();
     $("#analysisInvestmentFlow").innerHTML = `<table class="data-table"><thead><tr><th>MÊS</th><th>APORTE</th><th>RESGATE</th><th>LÍQUIDO INVESTIDO</th><th>RELAÇÃO</th></tr></thead><tbody>${months.map((item) => `<tr><td><strong>${monthLabel(item.period)}</strong></td><td class="number positive-number">${formatCurrency(item.aportes)}</td><td class="number negative-number">${formatCurrency(item.resgates)}</td><td class="number ${item.net >= 0 ? "positive-number" : "negative-number"}">${formatCurrency(item.net)}</td><td class="number">${item.aportes ? `${Math.round(item.resgates / item.aportes * 100)}%` : item.resgates ? "resgate sem aporte" : "—"}</td></tr>`).join("")}</tbody></table>`;

@@ -9,7 +9,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - planilha Google como fonte oficial dos dados;
 - histórico append-only na própria planilha, com revisões anteriores preservadas;
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
-- lançamentos por conta e categoria, com opções específicas como compras online, vestuário, pets, viagens, serviços, impostos e salário mensal (carteira de trabalho);
+- lançamentos por conta e categoria, incluindo Salário, Salário Parte 1, Salário Parte 2, Transporte - Manutenção e Transporte - Combustivel;
 - transferências entre contas, com saída identificada na origem e entrada correspondente no destino;
 - contas correntes e poupanças por banco;
 - investimentos vinculados diretamente a uma conta já cadastrada;
@@ -20,7 +20,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - módulo de investimentos com CDB, Tesouro, fundos, ações, ETFs, LCI/LCA e outros;
 - módulo de patrimônio para informar o valor atual de casa, carro, terra e outros bens, separado das contas e dos investimentos;
 - projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
-- análises mensais, categorias, composição patrimonial e taxa de sobra;
+- análises mensais, categorias, composição patrimonial, taxa de sobra e consolidação de transporte, alimentação e salários recebidos;
 - relatório financeiro avançado em TXT UTF-8, com salários declarados para referência, dados brutos, métricas, campos auxiliares para imposto de renda, padrões, alertas e perguntas prontas para uma IA;
 - workflow de GitHub Pages.
 
@@ -55,6 +55,8 @@ O módulo de investimentos trata projeções como estimativas brutas. Para um CD
 Ao cadastrar um investimento, a conta/banco é escolhida entre as contas existentes. Investimentos antigos no formato CDB continuam compatíveis e aparecem na nova aba “Investimentos”; a edição permite completar a conta e o CDI-base sem recriar a posição. Na carteira, use “Aporte” para aplicar mais na mesma posição, “Resgatar” para retirar parte ou todo o valor disponível e “Rendimento” para informar um rendimento conferido no extrato. Cada movimentação fica registrada dentro do investimento; aportes e resgates também criam o lançamento correspondente na conta escolhida, sem apagar o cadastro original.
 
 Na aba `Análises`, os blocos de aporte do mês, resgate do mês e aporte x resgate usam apenas as movimentações registradas pelos botões `Aporte` e `Resgatar`. O capital inicial informado ao cadastrar uma posição representa o valor já declarado da carteira e não é tratado automaticamente como aporte mensal, evitando transformar posição antiga em fluxo novo.
+
+O painel `Transporte, alimentação e salários por mês` reúne os últimos seis meses. Transporte soma as saídas em `Transporte`, `Transporte - Manutenção` e `Transporte - Combustivel`; alimentação soma as saídas de `Alimentação`; e salários recebidos somam somente entradas em `Salário`, `Salário Parte 1`, `Salário Parte 2` e na categoria salarial legada. Transferências internas e operações de investimento não entram nesses totais. As categorias antigas continuam preservadas como foram registradas.
 
 ## Dívidas
 

@@ -21,7 +21,7 @@ function assertAny(source, patterns, message) {
   if (!patterns.some((pattern) => pattern.test(source))) featureFailures.push(message);
 }
 
-for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "dividas", "fixos", "cdb", "investimentos", "patrimonio", "analises", "configuracoes", "dashboardWealthMetrics", "analysisInvestments", "analysisPatrimony", "analysisInvestmentFlow", "patrimonyForm", "passwordForm", "profileMonthlySalary", "profileAverageMonthlySalaryWithOvertime", "export-ai-report"]) assert.match(html, new RegExp(marker), `seção ausente: ${marker}`);
+for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "dividas", "fixos", "cdb", "investimentos", "patrimonio", "analises", "configuracoes", "dashboardWealthMetrics", "analysisInvestments", "analysisPatrimony", "analysisInvestmentFlow", "analysisEssentialCosts", "patrimonyForm", "passwordForm", "profileMonthlySalary", "profileAverageMonthlySalaryWithOvertime", "export-ai-report"]) assert.match(html, new RegExp(marker), `seção ausente: ${marker}`);
 for (const marker of ["cdbAccount", "investmentType", "benchmarkRate", "cancel-form", "debtForm", "debtAccount", "debtMetrics", "debtTable", "savingsForm", "savingsAccount", "savingsSummary", "manualYield", "monthlyRate", "investmentOperationDialog", "investmentOperationForm", "investmentOperationAccount"]) assert.match(html, new RegExp(marker), `campo ausente: ${marker}`);
 for (const marker of ["saveCurrentVault", "normalizeVault", "renderAnalyses", "renderInvestments", "renderPatrimony", "renderDebts", "handleDebtSubmit", "handlePatrimonySubmit", "editDebt", "editPatrimony", "totalDebt", "totalPatrimony", "remoteAccountId", "AbortController", "baseRevision", "openRemoteAccount", "changeRemotePassword", "handlePasswordSubmit", "backend online ainda está desatualizado", "buildAiReport", "exportAiReport", "reportMonthKeys", "operationalTransactions", "investmentTransactions", "investmentOperationType", "investmentFlowForPeriod", "investmentTransactionsForPeriod", "netInvestment", "investmentRate", "register", "login", "savings", "debts", "investments", "patrimony", "accountId", "handleSavingsSubmit", "investmentProjection", "benchmarkRate", "totalInvested", "totalInvestmentValue", "investmentYield", "investmentCurrentValue", "investmentHasHistory", "handleInvestmentOperationSubmit", "open-investment-operation", "operations", "investmentOperationId", "investmentOperationAccount", "balanceAfter", "editInvestment", "editFixed", "monthlyRate", "manualYield", "monthlySalary", "averageMonthlySalaryWithOvertime", "deleteAccount", "deleteInvestment", "accountReportLabel", "conta que ainda está vinculada"]) assert.match(js, new RegExp(marker), `regra ausente: ${marker}`);
 assert.match(js, /minimumFractionDigits:\s*2/, "a moeda precisa sempre exibir duas casas decimais");
@@ -51,14 +51,22 @@ assertAny(backend, [/transaction|lancamento|entrada|saida/i], "a transferência 
 
 // As categorias de lançamentos devem ser específicas e não podem esconder
 // registros antigos atrás do rótulo genérico "Outros".
-for (const category of ["Compras online", "Vestuário", "Cuidados pessoais", "Pets", "Viagens", "Impostos e taxas", "Serviços", "Doações", "Salário mensal \\(Carteira de trabalho\\)", "Categoria não disponível no sistema"]) {
+for (const category of ["Compras online", "Vestuário", "Cuidados pessoais", "Pets", "Viagens", "Impostos e taxas", "Serviços", "Doações", "Salário", "Salário Parte 1", "Salário Parte 2", "Transporte - Manutenção", "Transporte - Combustivel", "Salário mensal \\(Carteira de trabalho\\)", "Categoria não disponível no sistema"]) {
   assert.match(js, new RegExp(category), `categoria ausente: ${category}`);
 }
 assert.match(js, /normalizeLaunchCategory/, "categorias antigas precisam ser normalizadas");
 assert.match(js, /toLowerCase\(\)\s*===\s*["']outros["']/, "o valor legado Outros precisa ser migrado");
 assert.match(js, /value\s*===\s*["']Salário mensal["'].*Salário mensal \(Carteira de trabalho\)/, "a categoria legada Salário mensal precisa migrar para Carteira de trabalho");
 assert.match(js, /FIXED_COST_CATEGORIES\s*=\s*CATEGORIES\.filter/, "custos fixos precisam ter uma lista filtrada de categorias");
-assert.ok(js.includes('!["Salário mensal", "Salário mensal (Carteira de trabalho)"].includes(category)'), "Salário mensal deve ficar fora das categorias de custos fixos");
+assert.match(js, /SALARY_CATEGORIES\s*=\s*\[/, "as categorias salariais precisam compartilhar um agrupamento central");
+assert.match(js, /TRANSPORT_CATEGORIES\s*=\s*\[/, "as categorias de transporte precisam compartilhar um agrupamento central");
+assert.match(js, /function categoryGroupTotalForPeriod/, "a análise mensal precisa calcular grupos de categorias");
+assert.match(js, /function essentialMonthlyCosts/, "a análise mensal precisa consolidar transporte, alimentação e salários");
+assert.match(js, /!item\.transferId && !item\.investmentOperationId/, "a análise por grupos deve excluir transferências e investimentos");
+assert.match(js, /categoryGroupTotalForPeriod\(period, SALARY_CATEGORIES, "entrada"\)/, "salários recebidos devem considerar apenas entradas");
+assert.ok(js.includes('const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => !SALARY_CATEGORIES.includes(category));'), "categorias de salário devem ficar fora dos custos fixos");
+assert.match(readme, /Transporte, alimentação e salários por mês/i, "o README precisa documentar a análise mensal essencial");
+assert.match(readme, /Transferências internas e operações de investimento não entram nesses totais/i, "o README precisa documentar as exclusões da análise essencial");
 assert.match(html, /fixedCostCategory/, "o formulário de custos fixos precisa usar a lista centralizada de categorias");
 assert.doesNotMatch(html, /<option>Outros<\/option>/i, "o select de custos fixos não deve expor Outros");
 
