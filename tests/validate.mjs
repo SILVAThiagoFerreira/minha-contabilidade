@@ -55,6 +55,16 @@ for (const category of ["Compras online", "Vestuário", "Cuidados pessoais", "Pe
   assert.match(js, new RegExp(category), `categoria ausente: ${category}`);
 }
 assert.match(js, /normalizeLaunchCategory/, "categorias antigas precisam ser normalizadas");
+assert.match(js, /function normalizeCustomCategories/, "as categorias personalizadas precisam ser normalizadas por perfil");
+assert.match(js, /function launchCategories/, "as categorias personalizadas precisam entrar na lista de lançamentos");
+assert.match(js, /customCategories/, "o perfil precisa preservar as categorias personalizadas");
+assert.match(js, /handleCustomCategorySubmit/, "o frontend precisa permitir criar categorias personalizadas");
+assert.match(js, /editCustomCategory/, "o frontend precisa permitir editar categorias personalizadas");
+assert.match(js, /deleteCustomCategory/, "o frontend precisa permitir remover uma categoria apenas das novas seleções");
+assert.match(html, /customCategoriesForm/, "as configurações precisam expor o formulário de categoria personalizada");
+assert.match(html, /customCategoriesList/, "as configurações precisam listar categorias personalizadas");
+assert.match(backend, /function validateCustomCategories_/, "o backend precisa validar categorias personalizadas");
+assert.match(backend, /MAX_CUSTOM_CATEGORIES/, "o backend precisa limitar categorias personalizadas");
 assert.match(js, /toLowerCase\(\)\s*===\s*["']outros["']/, "o valor legado Outros precisa ser migrado");
 assert.match(js, /value\s*===\s*["']Salário mensal["'].*Salário mensal \(Carteira de trabalho\)/, "a categoria legada Salário mensal precisa migrar para Carteira de trabalho");
 assert.match(js, /FIXED_COST_CATEGORIES\s*=\s*CATEGORIES\.filter/, "custos fixos precisam ter uma lista filtrada de categorias");

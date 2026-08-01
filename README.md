@@ -10,6 +10,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - histórico append-only na própria planilha, com revisões anteriores preservadas;
 - visão geral por mês, saldo consolidado, entradas, saídas e resultado;
 - lançamentos por conta e categoria, incluindo Salário, Salário Parte 1, Salário Parte 2, Transporte - Manutenção e Transporte - Combustivel;
+- categorias personalizadas por perfil, com criação, edição e remoção da lista de novas seleções;
 - transferências entre contas, com saída identificada na origem e entrada correspondente no destino;
 - contas correntes e poupanças por banco;
 - investimentos vinculados diretamente a uma conta já cadastrada;
@@ -25,6 +26,10 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - workflow de GitHub Pages.
 
 As categorias de lançamentos não usam mais a opção genérica “Outros”. Quando um lançamento antigo ainda contém esse valor, ele é exibido e salvo como “Categoria não disponível no sistema”, para deixar claro que a descrição precisa ser conferida sem apagar o registro.
+
+## Categorias personalizadas
+
+Em `Configurações > Suas categorias`, cada usuário pode criar categorias próprias para lançamentos e custos fixos. Elas ficam no cofre daquele perfil e são sincronizadas junto com o histórico online; não aparecem para outros usuários. As categorias originais permanecem disponíveis e não podem ser alteradas. Ao editar uma categoria própria, os lançamentos e custos fixos que já a utilizam recebem o novo nome. Ao removê-la, os registros históricos são preservados e apenas deixam de oferecê-la para novos cadastros.
 
 ## Arquitetura online
 

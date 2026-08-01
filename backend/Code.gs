@@ -14,6 +14,8 @@ const CURRENT_HEADERS = ["accountId", "username", "revision", "updatedAt", "chec
 const JOURNAL_HEADERS = ["journalId", "accountId", "username", "revision", "updatedAt", "checksum", "payload", "source"];
 const MAX_PAYLOAD_CHARS = 45000;
 const MAX_ITEMS_PER_COLLECTION = 10000;
+const MAX_CUSTOM_CATEGORIES = 100;
+const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
 
@@ -196,7 +198,7 @@ function login_(identity) {
 function blankVault_(displayName) {
   return {
     version: 1,
-    profile: { displayName: displayName || "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0 },
+    profile: { displayName: displayName || "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
     accounts: [],
     debts: [],
     transactions: [],
@@ -213,6 +215,7 @@ function blankVault_(displayName) {
 
 function jsonPayload_(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Dados do usuário ausentes ou inválidos.");
+  validateCustomCategories_(payload.profile && payload.profile.customCategories);
   ["accounts", "debts", "transactions", "fixedCosts", "transfers", "fixedCostPayments", "cdbs", "investments", "patrimony", "savings"].forEach((name) => {
     if (payload[name] !== undefined && !Array.isArray(payload[name])) throw new Error("Estrutura inválida em " + name + ".");
     if (Array.isArray(payload[name]) && payload[name].length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de registros excedida em " + name + ".");
@@ -225,6 +228,24 @@ function jsonPayload_(payload) {
   const text = JSON.stringify(payload);
   if (text.length > MAX_PAYLOAD_CHARS) throw new Error("O cofre ultrapassou o limite seguro da planilha.");
   return text;
+}
+
+function validateCustomCategories_(categories) {
+  if (categories === undefined) return;
+  if (!Array.isArray(categories)) throw new Error("A lista de categorias personalizadas é inválida.");
+  if (categories.length > MAX_CUSTOM_CATEGORIES) throw new Error("A quantidade de categorias personalizadas excede o limite permitido.");
+  const ids = Object.create(null);
+  const names = Object.create(null);
+  categories.forEach((category) => {
+    if (!category || typeof category !== "object" || Array.isArray(category)) throw new Error("Categoria personalizada inválida.");
+    const id = String(category.id || "").trim();
+    const name = String(category.name || "").trim().replace(/\s+/g, " ");
+    const nameKey = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (!/^[A-Za-z0-9_-]{3,100}$/.test(id) || ids[id]) throw new Error("Cada categoria personalizada precisa ter um ID único e válido.");
+    if (!name || name.length > MAX_CUSTOM_CATEGORY_NAME_LENGTH || names[nameKey]) throw new Error("Cada categoria personalizada precisa ter um nome único de até 50 caracteres.");
+    ids[id] = true;
+    names[nameKey] = true;
+  });
 }
 
 function validateDebts_(debts, accounts) {
