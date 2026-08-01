@@ -15,6 +15,8 @@
     configuracoes: "Configurações"
   };
   const UNAVAILABLE_CATEGORY = "Categoria não disponível no sistema";
+  const MAX_CUSTOM_CATEGORIES = 100;
+  const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
   const CATEGORIES = [
     "Moradia",
     "Casa",
@@ -157,7 +159,7 @@
   function blankVault(displayName = "") {
     return {
       version: 1,
-      profile: { displayName, currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0 },
+      profile: { displayName, currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
       accounts: [],
       debts: [],
       transactions: [],
@@ -178,11 +180,45 @@
     return !value || value.toLowerCase() === "outros" ? UNAVAILABLE_CATEGORY : value;
   }
 
+  function categoryNameKey(name) {
+    return String(name || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  }
+
+  function normalizeCustomCategories(categories) {
+    const knownNames = new Set(CATEGORIES.map(categoryNameKey));
+    const knownIds = new Set();
+    if (!Array.isArray(categories)) return [];
+    return categories.reduce((result, item) => {
+      const id = String(item?.id || "").trim();
+      const name = String(item?.name || "").trim().replace(/\s+/g, " ").slice(0, MAX_CUSTOM_CATEGORY_NAME_LENGTH);
+      const key = categoryNameKey(name);
+      if (!id || !name || knownIds.has(id) || knownNames.has(key) || result.length >= MAX_CUSTOM_CATEGORIES) return result;
+      knownIds.add(id);
+      knownNames.add(key);
+      result.push({
+        id,
+        name,
+        createdAt: String(item?.createdAt || new Date().toISOString()),
+        updatedAt: String(item?.updatedAt || item?.createdAt || new Date().toISOString())
+      });
+      return result;
+    }, []);
+  }
+
+  function launchCategories() {
+    return [...CATEGORIES, ...vault.profile.customCategories.map((category) => category.name)];
+  }
+
+  function fixedCostCategories() {
+    return launchCategories().filter((category) => !SALARY_CATEGORIES.includes(category));
+  }
+
   function normalizeVault(value) {
     const normalized = { ...blankVault(), ...(value || {}) };
     normalized.profile = { ...blankVault().profile, ...(value?.profile || {}) };
     normalized.profile.monthlySalary = toAmount(normalized.profile.monthlySalary);
     normalized.profile.averageMonthlySalaryWithOvertime = toAmount(normalized.profile.averageMonthlySalaryWithOvertime);
+    normalized.profile.customCategories = normalizeCustomCategories(normalized.profile.customCategories);
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
     normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
     normalized.transactions = Array.isArray(value?.transactions)
@@ -356,8 +392,8 @@
     const accounts = vault.accounts.map((account) => ({ value: account.id, label: account.name }));
     const linkedAccounts = vault.accounts.map((account) => ({ value: account.id, label: `${account.name} · ${account.type === "poupanca" ? "Poupança" : "Conta corrente"}` }));
     const savingsAccounts = vault.accounts.filter((account) => account.type === "poupanca").map((account) => ({ value: account.id, label: `${account.name}${account.nickname ? ` · ${account.nickname}` : ""}` }));
-    populateSelect($("#transactionCategory"), CATEGORIES.map((category) => ({ value: category, label: category })), $("#transactionCategory")?.value || "Alimentação");
-    populateSelect($("#fixedCostCategory"), FIXED_COST_CATEGORIES.map((category) => ({ value: category, label: category })), $("#fixedCostCategory")?.value || "Moradia");
+    populateSelect($("#transactionCategory"), launchCategories().map((category) => ({ value: category, label: category })), $("#transactionCategory")?.value || "Alimentação");
+    populateSelect($("#fixedCostCategory"), fixedCostCategories().map((category) => ({ value: category, label: category })), $("#fixedCostCategory")?.value || "Moradia");
     populateSelect($("#transactionAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transactionAccount")?.value || "");
     populateSelect($("#debtAccount"), [{ value: "", label: "Sem conta definida" }, ...accounts], $("#debtAccount")?.value || "");
     populateSelect($("#transferSourceAccount"), accounts.length ? accounts : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#transferSourceAccount")?.value || "");
@@ -1072,10 +1108,98 @@
     $("#profileDisplayName").value = vault.profile.displayName || "";
     setMoneyInputValue($("#profileMonthlySalary"), vault.profile.monthlySalary);
     setMoneyInputValue($("#profileAverageMonthlySalaryWithOvertime"), vault.profile.averageMonthlySalaryWithOvertime);
+    renderCustomCategories();
     $("#storageTitle").textContent = "Planilha sincronizada";
     $("#storagePill").textContent = "ONLINE";
     $("#storageDescription").textContent = "Os lançamentos são gravados na planilha e recebem uma revisão permanente no histórico online.";
     $("#storageDetail").textContent = "A planilha online é a fonte oficial dos seus dados.";
+  }
+
+  function renderCustomCategories() {
+    const list = $("#customCategoriesList");
+    if (!list) return;
+    const categories = vault?.profile?.customCategories || [];
+    if (!categories.length) {
+      list.innerHTML = '<p class="custom-categories-empty">Nenhuma categoria personalizada criada ainda.</p>';
+      return;
+    }
+    list.innerHTML = categories.map((category) => `<div class="custom-category-row"><strong title="${escapeHtml(category.name)}">${escapeHtml(category.name)}</strong><span class="custom-category-actions"><button class="custom-category-action" type="button" data-action="edit-custom-category" data-id="${escapeHtml(category.id)}" aria-label="Editar ${escapeHtml(category.name)}" title="Editar categoria">✎</button><button class="custom-category-action" type="button" data-action="delete-custom-category" data-id="${escapeHtml(category.id)}" aria-label="Excluir ${escapeHtml(category.name)}" title="Excluir categoria">×</button></span></div>`).join("");
+  }
+
+  function cleanCustomCategoryName(value) {
+    return String(value || "").trim().replace(/\s+/g, " ").slice(0, MAX_CUSTOM_CATEGORY_NAME_LENGTH);
+  }
+
+  function customCategoryConflict(name, excludedId = "") {
+    const key = categoryNameKey(name);
+    if (CATEGORIES.some((category) => categoryNameKey(category) === key)) return "Essa categoria já existe entre as categorias originais.";
+    if (vault.profile.customCategories.some((category) => category.id !== excludedId && categoryNameKey(category.name) === key)) return "Você já criou uma categoria com esse nome.";
+    return "";
+  }
+
+  async function handleCustomCategorySubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const name = cleanCustomCategoryName(new FormData(form).get("name"));
+    if (!name) { showToast("Informe o nome da categoria.", "error"); return; }
+    const conflict = customCategoryConflict(name);
+    if (conflict) { showToast(conflict, "error"); return; }
+    if (vault.profile.customCategories.length >= MAX_CUSTOM_CATEGORIES) { showToast("Limite de categorias personalizadas atingido.", "error"); return; }
+    const category = { id: uid("category"), name, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    vault.profile.customCategories.push(category);
+    try {
+      await saveCurrentVault();
+      form.reset();
+      renderAll();
+      showToast("Categoria adicionada.");
+    } catch (error) {
+      vault.profile.customCategories = vault.profile.customCategories.filter((item) => item.id !== category.id);
+      renderAll();
+    }
+  }
+
+  async function editCustomCategory(id) {
+    const category = vault.profile.customCategories.find((item) => item.id === id);
+    if (!category) return;
+    const name = cleanCustomCategoryName(window.prompt("Nome da categoria", category.name));
+    if (!name || name === category.name) return;
+    const conflict = customCategoryConflict(name, id);
+    if (conflict) { showToast(conflict, "error"); return; }
+    const previous = { ...category };
+    const previousTransactions = vault.transactions;
+    const previousFixedCosts = vault.fixedCosts;
+    category.name = name;
+    category.updatedAt = new Date().toISOString();
+    vault.transactions = vault.transactions.map((item) => item.category === previous.name ? { ...item, category: name } : item);
+    vault.fixedCosts = vault.fixedCosts.map((item) => item.category === previous.name ? { ...item, category: name } : item);
+    try {
+      await saveCurrentVault();
+      renderAll();
+      showToast("Categoria atualizada nos lançamentos e custos fixos relacionados.");
+    } catch (error) {
+      Object.assign(category, previous);
+      vault.transactions = previousTransactions;
+      vault.fixedCosts = previousFixedCosts;
+      renderAll();
+    }
+  }
+
+  async function deleteCustomCategory(id) {
+    const category = vault.profile.customCategories.find((item) => item.id === id);
+    if (!category) return;
+    const inUse = vault.transactions.some((item) => item.category === category.name) || vault.fixedCosts.some((item) => item.category === category.name);
+    const warning = inUse ? " Ela permanece nos lançamentos e custos fixos já registrados." : "";
+    if (!window.confirm(`Excluir a categoria \"${category.name}\" da lista de novas seleções?${warning}`)) return;
+    const previous = vault.profile.customCategories;
+    vault.profile.customCategories = previous.filter((item) => item.id !== id);
+    try {
+      await saveCurrentVault();
+      renderAll();
+      showToast("Categoria removida da lista de novas seleções.");
+    } catch (error) {
+      vault.profile.customCategories = previous;
+      renderAll();
+    }
   }
 
   function renderAll() {
@@ -1653,6 +1777,7 @@
     $("#savingsForm").addEventListener("submit", handleSavingsSubmit);
     $("#savingsAccount").addEventListener("change", fillSavingsForm);
     $("#profileForm").addEventListener("submit", handleProfileSubmit);
+    $("#customCategoriesForm").addEventListener("submit", handleCustomCategorySubmit);
     setupMoneyInputs();
     document.addEventListener("click", async (event) => {
       const target = event.target.closest("[data-view-target], [data-view-link], [data-action]");
@@ -1680,6 +1805,8 @@
       if (action === "close-investment-operation") closeInvestmentOperation();
       if (action === "toggle-fixed") { const item = vault.fixedCosts.find((fixed) => fixed.id === target.dataset.id); if (item) { item.active = item.active === false; await saveCurrentVault(); renderAll(); showToast(item.active ? "Custo fixo ativado." : "Custo fixo pausado."); } }
       if (action === "toggle-fixed-payment") await toggleFixedPayment(target.dataset.id);
+      if (action === "edit-custom-category") await editCustomCategory(target.dataset.id);
+      if (action === "delete-custom-category") await deleteCustomCategory(target.dataset.id);
     });
   }
 
