@@ -20,6 +20,7 @@
   const MAX_CUSTOM_CATEGORIES = 100;
   const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
   const MAX_PROFILE_PHOTO_CHARS = 26000;
+  const MAX_VAULT_PAYLOAD_CHARS = 45000;
   const PROFILE_PHOTO_SIZE = 160;
   const CATEGORIES = [
     "Moradia",
@@ -365,7 +366,7 @@
     avatar.classList.toggle("avatar--photo", Boolean(photo));
   }
 
-  async function resizeProfilePhoto(file, crop = {}) {
+  async function resizeProfilePhoto(file, crop = {}, maximumCharacters = MAX_PROFILE_PHOTO_CHARS) {
     if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type)) throw new Error("Escolha uma imagem JPG, PNG ou WebP.");
     if (file.size > 5 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 5 MB.");
     const source = await createImageBitmap(file);
@@ -373,22 +374,39 @@
     const sourceSide = Math.min(source.width, source.height) / zoom;
     const maxX = Math.max(0, source.width - sourceSide);
     const maxY = Math.max(0, source.height - sourceSide);
-    const x = maxX * Math.max(0, Math.min(1, (Number(crop.x) || 0.5)));
-    const y = maxY * Math.max(0, Math.min(1, (Number(crop.y) || 0.5)));
+    const cropX = Number(crop.x);
+    const cropY = Number(crop.y);
+    const x = maxX * Math.max(0, Math.min(1, Number.isFinite(cropX) ? cropX : .5));
+    const y = maxY * Math.max(0, Math.min(1, Number.isFinite(cropY) ? cropY : .5));
     const canvas = document.createElement("canvas");
-    canvas.width = PROFILE_PHOTO_SIZE;
-    canvas.height = PROFILE_PHOTO_SIZE;
-    canvas.getContext("2d").drawImage(source, x, y, sourceSide, sourceSide, 0, 0, PROFILE_PHOTO_SIZE, PROFILE_PHOTO_SIZE);
+    const context = canvas.getContext("2d");
+    let photo = "";
+    // A compactação progressiva evita que uma foto válida falhe apenas por ter
+    // muitos detalhes, mantendo sempre o limite aceito pelo backend.
+    for (const size of [PROFILE_PHOTO_SIZE, 144, 128, 112, 96, 80]) {
+      canvas.width = size;
+      canvas.height = size;
+      for (const quality of [.82, .74, .66, .58]) {
+        context.clearRect(0, 0, size, size);
+        context.drawImage(source, x, y, sourceSide, sourceSide, 0, 0, size, size);
+        photo = canvas.toDataURL("image/jpeg", quality);
+        if (photo.length <= maximumCharacters) {
+          source.close();
+          return photo;
+        }
+      }
+    }
     source.close();
-    const photo = canvas.toDataURL("image/jpeg", .82);
-    if (photo.length > MAX_PROFILE_PHOTO_CHARS) throw new Error("A imagem ficou maior que o limite seguro. Escolha uma foto mais simples.");
-    return photo;
+    throw new Error("Não foi possível compactar essa foto dentro do limite seguro. Escolha outra imagem.");
   }
 
   function openProfilePhotoEditor(file) {
     const reader = new FileReader();
     reader.onerror = () => showToast("Não foi possível abrir a foto selecionada.", "error");
     reader.onload = () => {
+      const sourceImage = new Image();
+      sourceImage.onerror = () => showToast("Não foi possível ler a foto selecionada.", "error");
+      sourceImage.onload = () => {
       const dialog = document.createElement("dialog");
       dialog.className = "photo-editor-dialog";
       dialog.innerHTML = `<form method="dialog" class="photo-editor"><div><p class="eyebrow">FOTO DO PERFIL</p><h3>Ajuste o enquadramento</h3><p class="settings-copy">Arraste a foto na grade ou use os controles para centralizar o que aparecerá no seu perfil.</p></div><div class="photo-editor-preview" aria-label="Prévia da foto. Arraste para ajustar o enquadramento" role="application" tabindex="0"></div><label class="field"><span>Zoom</span><input name="zoom" type="range" min="1" max="3" step="0.01" value="1" /></label><label class="field"><span>Posição horizontal</span><input name="x" type="range" min="0" max="1" step="0.01" value="0.5" /></label><label class="field"><span>Posição vertical</span><input name="y" type="range" min="0" max="1" step="0.01" value="0.5" /></label><div class="profile-photo-actions"><button class="button button--secondary" value="cancel">Cancelar</button><button class="button button--primary" value="apply">Aplicar foto</button></div></form>`;
@@ -398,8 +416,11 @@
         const zoom = Number(dialog.elements.zoom.value);
         const x = Number(dialog.elements.x.value);
         const y = Number(dialog.elements.y.value);
+        const previewSize = Math.max(1, preview.clientWidth || 260);
+        const coverScale = Math.max(previewSize / sourceImage.naturalWidth, previewSize / sourceImage.naturalHeight) * zoom;
         preview.style.backgroundImage = `url("${reader.result}")`;
-        preview.style.backgroundSize = `${zoom * 100}%`;
+        // Usa o mesmo corte quadrado e a mesma escala usados no canvas final.
+        preview.style.backgroundSize = `${sourceImage.naturalWidth * coverScale}px ${sourceImage.naturalHeight * coverScale}px`;
         preview.style.backgroundPosition = `${x * 100}% ${y * 100}%`;
       };
       [dialog.elements.zoom, dialog.elements.x, dialog.elements.y].forEach((control) => control.addEventListener("input", updatePreview));
@@ -424,7 +445,11 @@
       dialog.addEventListener("close", async () => {
         try {
           if (dialog.returnValue === "apply") {
-            vault.profile.avatarDataUrl = await resizeProfilePhoto(file, { zoom: dialog.elements.zoom.value, x: dialog.elements.x.value, y: dialog.elements.y.value });
+            const profileWithoutPhoto = { ...vault.profile, avatarDataUrl: "" };
+            const payloadWithoutPhoto = JSON.stringify({ ...vault, profile: profileWithoutPhoto });
+            const photoBudget = Math.min(MAX_PROFILE_PHOTO_CHARS, MAX_VAULT_PAYLOAD_CHARS - payloadWithoutPhoto.length - 256);
+            if (photoBudget < 900) throw new Error("Não há espaço seguro para uma foto neste cofre. Reduza os dados sincronizados e tente novamente.");
+            vault.profile.avatarDataUrl = await resizeProfilePhoto(file, { zoom: dialog.elements.zoom.value, x: dialog.elements.x.value, y: dialog.elements.y.value }, photoBudget);
             await saveCurrentVault();
             setSidebarAvatar();
             renderSettings();
@@ -434,6 +459,8 @@
         finally { dialog.remove(); }
       }, { once: true });
       dialog.showModal();
+      };
+      sourceImage.src = reader.result;
     };
     reader.readAsDataURL(file);
   }
