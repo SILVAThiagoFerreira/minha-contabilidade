@@ -23,6 +23,10 @@
   // Uma célula do Google Sheets suporta até 50 mil caracteres. Mantemos uma
   // margem para não rejeitar cofre válidos, inclusive os que tenham avatar.
   const MAX_VAULT_PAYLOAD_CHARS = 49000;
+  // A Web App pode estar em uma versão anterior durante a propagação. Fotos
+  // usam este teto conservador para continuarem compatíveis enquanto o
+  // restante do cofre mantém o limite atual do cliente.
+  const PROFILE_PHOTO_SYNC_COMPATIBLE_PAYLOAD_CHARS = 45000;
   const PROFILE_PHOTO_SIZE = 160;
   const CATEGORIES = [
     "Moradia",
@@ -470,7 +474,7 @@
           if (dialog.returnValue === "apply") {
             const profileWithoutPhoto = { ...vault.profile, avatarDataUrl: "" };
             const payloadWithoutPhoto = JSON.stringify({ ...vault, profile: profileWithoutPhoto });
-            const photoBudget = Math.min(MAX_PROFILE_PHOTO_CHARS, MAX_VAULT_PAYLOAD_CHARS - payloadWithoutPhoto.length - 256);
+            const photoBudget = Math.min(MAX_PROFILE_PHOTO_CHARS, PROFILE_PHOTO_SYNC_COMPATIBLE_PAYLOAD_CHARS - payloadWithoutPhoto.length - 256);
             if (photoBudget < 512) throw new Error("Não há espaço suficiente para uma foto neste cofre. Reduza os dados sincronizados e tente novamente.");
             const previousPhoto = vault.profile.avatarDataUrl;
             vault.profile.avatarDataUrl = await resizeProfilePhoto(file, { zoom: dialog.elements.zoom.value, x: dialog.elements.x.value, y: dialog.elements.y.value }, photoBudget);
@@ -1446,7 +1450,7 @@
   }
 
   function adminMetric(label, value, detail = "") {
-    return `<article class="metric-card metric-card--accent"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong>${detail ? `<span class="metric-meta">${escapeHtml(detail)}</span>` : ""}</article>`;
+    return `<article class="metric-card metric-card--accent"><p class="metric-label">${escapeHtml(label)}</p><div class="metric-value">${escapeHtml(value)}</div>${detail ? `<p class="metric-meta">${escapeHtml(detail)}</p>` : ""}</article>`;
   }
 
   function adminNumber(value) {
