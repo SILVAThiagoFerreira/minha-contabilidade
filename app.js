@@ -657,10 +657,26 @@
     $$("[data-view]").forEach((item) => item.classList.toggle("is-active", item.dataset.view === view));
     $$("[data-view-target]").forEach((item) => item.classList.toggle("is-active", item.dataset.viewTarget === view));
     $("#pageTitle").textContent = VIEWS[view];
-    $("#sidebar").classList.remove("is-open");
+    closeSidebar();
     window.history.replaceState({}, "", `#${view}`);
     renderAll();
     if (view === "administracao") refreshAdminDashboard();
+  }
+
+  function setSidebarOpen(open) {
+    const sidebar = $("#sidebar");
+    const menuButton = $("#menuButton");
+    if (!sidebar || !menuButton) return;
+    sidebar.classList.toggle("is-open", open);
+    document.body.classList.toggle("sidebar-is-open", open);
+    menuButton.setAttribute("aria-expanded", String(open));
+    menuButton.setAttribute("aria-label", open ? "Fechar menu" : "Abrir menu");
+  }
+
+  function closeSidebar({ returnFocus = false } = {}) {
+    const wasOpen = $("#sidebar")?.classList.contains("is-open");
+    setSidebarOpen(false);
+    if (wasOpen && returnFocus) $("#menuButton")?.focus();
   }
 
   function currentPeriod() {
@@ -2215,7 +2231,11 @@
     $("#forgotPasswordButton").addEventListener("click", () => setPasswordRecoveryMode("request"));
     $("#authBackButton").addEventListener("click", () => { passwordRecoveryToken = null; passwordRecoveryUsername = null; window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`); setAuthMode("login"); });
     $("#logoutButton").addEventListener("click", leaveApp);
-    $("#menuButton").addEventListener("click", () => $("#sidebar").classList.toggle("is-open"));
+    $("#menuButton").addEventListener("click", () => setSidebarOpen(!$("#sidebar").classList.contains("is-open")));
+    $("#sidebarBackdrop").addEventListener("click", () => closeSidebar({ returnFocus: true }));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && $("#sidebar")?.classList.contains("is-open")) closeSidebar({ returnFocus: true });
+    });
     $("#periodSelect").addEventListener("change", renderAll);
     $("#transactionFilter").addEventListener("change", renderTransactions);
     $("#transactionForm").addEventListener("submit", handleTransactionSubmit);
