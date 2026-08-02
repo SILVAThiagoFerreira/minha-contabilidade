@@ -88,6 +88,9 @@ assert.match(js, /sort-dom-table/, "a ordenação das tabelas precisa responder 
 assert.match(css, /data-table--transactions/, "a tabela de lançamentos precisa ter uma apresentação responsiva própria");
 assert.match(html, /<title>MINHA CONTABILIDADE<\/title>/, "o título da aba precisa usar MINHA CONTABILIDADE");
 assert.match(html, /favicon\.svg/, "a aba precisa usar o ícone do aplicativo");
+assert.match(html, /class="auth-mark"[^>]*>MC<\/div>/, "a marca de acesso precisa usar o monograma MC");
+assert.match(html, /class="brand-symbol"[^>]*>MC<\/div>/, "a marca lateral precisa usar o monograma MC");
+assert.match(css, /#f3b21a/, "a identidade premium precisa usar o dourado da nova paleta");
 assert.match(html, /deixar o investimento trabalhando com você/, "a apresentação precisa falar de investimento de forma ampla");
 assert.doesNotMatch(html, /Seu cadastro e seus dados ficam armazenados online na planilha\./, "a nota de armazenamento não deve aparecer no login");
 assert.doesNotMatch(html, /<h3>Armazenamento online<\/h3>/, "o cartão de armazenamento online não deve aparecer em configurações");
