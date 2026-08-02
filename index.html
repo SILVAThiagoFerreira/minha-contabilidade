@@ -74,7 +74,12 @@
             </label>
             <label class="field">
               <span>Senha</span>
-              <input id="authPassword" name="password" type="password" autocomplete="current-password" placeholder="mínimo de 8 caracteres" required />
+              <span class="password-input">
+                <input id="authPassword" name="password" type="password" autocomplete="current-password" placeholder="mínimo de 8 caracteres" required />
+                <button id="authPasswordToggle" class="password-toggle" type="button" aria-label="Mostrar senha" aria-pressed="false" title="Mostrar senha">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.6"/></svg>
+                </button>
+              </span>
             </label>
             <label id="confirmPasswordField" class="field is-hidden">
               <span>Confirme sua senha</span>
@@ -82,8 +87,19 @@
             </label>
             <button class="button button--primary button--wide" type="submit" id="authSubmit">Entrar</button>
           </form>
+          <form id="passwordRecoveryRequestForm" class="stack-form auth-recovery is-hidden" novalidate>
+            <div class="auth-heading"><h2>Recuperar acesso</h2><p>Informe seu usuário. Enviaremos um link somente para o e-mail cadastrado no perfil.</p></div>
+            <label class="field"><span>Usuário</span><input id="passwordRecoveryUsername" name="username" autocomplete="username" required /></label>
+            <button class="button button--primary button--wide" type="submit">Enviar link de recuperação</button>
+          </form>
+          <form id="passwordRecoveryConfirmForm" class="stack-form auth-recovery is-hidden" novalidate>
+            <div class="auth-heading"><h2>Definir nova senha</h2><p>Escolha uma nova senha para voltar a acessar sua conta.</p></div>
+            <label class="field"><span>Nova senha</span><input id="passwordRecoveryNewPassword" name="newPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
+            <label class="field"><span>Confirme a nova senha</span><input name="newPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label>
+            <button class="button button--primary button--wide" type="submit">Atualizar senha</button>
+          </form>
           <p id="authNotice" class="form-notice" role="status"></p>
-          <button id="authModeToggle" class="text-button" type="button">Criar uma conta</button>
+          <div class="auth-actions"><button id="authModeToggle" class="text-button" type="button">Criar uma conta</button><button id="forgotPasswordButton" class="text-button" type="button">Esqueci minha senha</button><button id="authBackButton" class="text-button is-hidden" type="button">Voltar ao acesso</button></div>
           <p class="auth-privacy"><span class="status-dot status-dot--green"></span> Seus dados são transmitidos por conexão segura e armazenados separadamente do código publicado.</p>
         </div>
       </section>

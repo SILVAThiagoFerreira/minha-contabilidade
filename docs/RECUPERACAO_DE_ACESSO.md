@@ -1,17 +1,20 @@
 # Recuperação de acesso
 
-## Estado atual
+## Fluxo implementado
 
-O sistema possui troca de senha para usuários já autenticados. A recuperação por e-mail para quem não consegue entrar ainda não está ativada, pois ela exige um canal confiável de envio, tokens temporários com expiração e confirmação de propriedade do e-mail.
+O login oferece **Esqueci minha senha**. A pessoa informa o usuário e o Apps
+Script consulta o e-mail salvo no perfil do cofre. Sem e-mail cadastrado, a
+interface informa explicitamente que aquele usuário não possui e-mail de
+verificação. Para contas inexistentes ou inativas, a resposta é neutra para
+reduzir enumeração de usuários.
 
-Não apresente uma recuperação de senha como concluída enquanto essas etapas não estiverem implementadas no Apps Script e verificadas em produção.
+Quando houver e-mail, o backend cria um token aleatório, guarda apenas seu hash
+em `PasswordResets`, limita pedidos repetidos por usuário e envia um link de
+uso único que expira em 30 minutos. O token nunca é colocado em planilha ou
+log em texto puro. A confirmação valida hash, validade e uso anterior antes de
+trocar o verificador de senha com um novo salt.
 
-## Requisitos para ativação segura
-
-1. Exigir e validar um e-mail de contato no perfil.
-2. Gerar token aleatório de uso único, com hash e expiração curta armazenados no backend privado.
-3. Enviar link de redefinição por provedor de e-mail configurado somente em propriedades privadas do Apps Script.
-4. Confirmar o token antes de alterar salt e verificador da senha.
-5. Invalidar o token após o uso e registrar a data de redefinição sem guardar senhas.
-
-Até essa implantação, a troca de senha autenticada permanece o único fluxo seguro disponível.
+Configure `APP_PUBLIC_URL` nas Script Properties com a URL pública do site
+(sem dados privados). Depois de atualizar `backend/Code.gs`, publique uma nova
+versão do Web App para autorizar o `MailApp` e servir as ações
+`request-password-reset` e `confirm-password-reset`.

@@ -37,7 +37,7 @@ assert.match(js, /#investmentOperationAmount/, "a operação de investimento pre
 assert.doesNotMatch(js, /R\$ .*mil|R\$ .* mi/, "a exibição não deve abreviar valores em mil ou milhões");
 assert.match(html, /R\$ 4\.820,00/, "os valores demonstrativos também precisam ter duas casas");
 for (const marker of ["debts", "investments", "patrimony", "validateDebts_", "validatePatrimony_", "validateInvestmentOperations_", "investmentByOperation", "transactionCount", "operations"]) assert.match(backend, new RegExp(marker), `coleção ausente no backend: ${marker}`);
-for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "changePassword_", "change-password", "passwordVerifier_", "SPREADSHEET_ID", "accountId", "VaultJournal", "LockService", "checksum_", "savings", "admin-dashboard", "adminDashboard_", "requireAdmin_", "provisionAdminFromScriptProperties", "ADMIN_PASSWORD", "AccessLog", "recordAccess_", "accessRows_"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
+for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "changePassword_", "change-password", "passwordVerifier_", "SPREADSHEET_ID", "accountId", "VaultJournal", "LockService", "checksum_", "savings", "admin-dashboard", "adminDashboard_", "requireAdmin_", "provisionAdminFromScriptProperties", "promoteExistingAdminFromScriptProperties", "ADMIN_PASSWORD", "AccessLog", "recordAccess_", "accessRows_", "request-password-reset", "confirm-password-reset", "PasswordResets", "MailApp", "PASSWORD_RESET_TTL_MS"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
 
 // Transferências são uma operação pareada: a conta de origem recebe a saída,
 // a conta de destino recebe a entrada e o restante do sistema pode identificá-las.
@@ -146,9 +146,17 @@ assert.match(js, /session\?\.role !== "admin"/, "o painel administrativo precisa
 assert.match(js, /function refreshAdminDashboard/, "o painel administrativo precisa atualizar os indicadores");
 assert.match(html, /Nenhum lançamento, saldo ou dado financeiro individual/, "o painel administrativo não deve exibir dados financeiros individuais");
 assert.match(html, /profilePhotoInput/, "as configurações precisam permitir selecionar uma foto de perfil");
+assert.match(html, /authPasswordToggle/, "a tela de acesso precisa permitir mostrar ou ocultar a senha digitada");
+assert.match(html, /forgotPasswordButton/, "a tela de acesso precisa oferecer recuperação de senha");
+assert.match(html, /passwordRecoveryRequestForm/, "a recuperação precisa solicitar o usuário");
+assert.match(js, /handlePasswordRecoveryRequest/, "o frontend precisa solicitar recuperação de senha");
+assert.match(js, /handlePasswordRecoveryConfirm/, "o frontend precisa confirmar a nova senha pelo token");
+assert.match(js, /email_missing/, "usuários sem e-mail precisam receber o aviso de recuperação indisponível");
+assert.match(js, /openProfilePhotoEditor/, "a foto precisa oferecer ajuste de enquadramento antes de salvar");
 assert.match(html, /profileEmail/, "as configurações precisam solicitar um e-mail de recuperação");
 assert.match(html, /profileEmailNotice/, "usuários sem e-mail precisam receber uma orientação visível");
 assert.match(js, /resizeProfilePhoto/, "a foto precisa ser reduzida antes da sincronização");
+assert.match(js, /pointerdown/, "o enquadramento da foto precisa permitir ajuste direto na grade");
 assert.match(js, /removeProfilePhoto/, "a foto do perfil precisa poder ser removida");
 assert.match(js, /normalizeProfileEmail/, "o e-mail do perfil precisa ser validado no frontend");
 assert.match(backend, /validateProfile_/, "o perfil precisa ser validado no backend");

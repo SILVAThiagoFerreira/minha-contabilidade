@@ -24,6 +24,13 @@ também as demais propriedades temporárias quando não forem mais necessárias.
 Nunca adicione a senha, o ID da planilha, links de armazenamento ou exportações
 financeiras ao repositório público.
 
+## Promover uma conta existente
+
+Para conceder acesso administrativo a uma conta que já existe sem alterar sua
+senha, defina temporariamente `ADMIN_PROMOTE_USERNAME` nas Script Properties e
+execute `promoteExistingAdminFromScriptProperties`. A função altera somente o
+papel para `admin` e remove a propriedade temporária ao concluir.
+
 ## Dados retornados ao painel
 
 A ação administrativa retorna somente indicadores agregados do sistema:

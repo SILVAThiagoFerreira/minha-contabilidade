@@ -16,6 +16,7 @@ const USER_HEADERS = ["accountId", "username", "displayName", "salt", "verifier"
 const CURRENT_HEADERS = ["accountId", "username", "revision", "updatedAt", "checksum", "payload"];
 const JOURNAL_HEADERS = ["journalId", "accountId", "username", "revision", "updatedAt", "checksum", "payload", "source"];
 const ACCESS_HEADERS = ["accessId", "accountId", "username", "accessedAt", "event"];
+const PASSWORD_RESET_HEADERS = ["resetId", "accountId", "username", "tokenHash", "createdAt", "expiresAt", "usedAt"];
 const MAX_PAYLOAD_CHARS = 45000;
 const MAX_ITEMS_PER_COLLECTION = 10000;
 const MAX_CUSTOM_CATEGORIES = 100;
@@ -23,6 +24,8 @@ const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
 const MAX_PROFILE_PHOTO_CHARS = 26000;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
+const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
+const PASSWORD_RESET_RATE_LIMIT_MS = 60 * 1000;
 
 function doGet() {
   return json_({ ok: true, service: "minha-contabilidade", storage: "Google Sheets: Users + VaultCurrent + VaultJournal" });
@@ -33,6 +36,8 @@ function doPost(event) {
     const body = JSON.parse(event && event.postData && event.postData.contents || "{}");
     const action = String(body.action || "").trim().toLowerCase();
     if (action === "register") return json_(register_(body));
+    if (action === "request-password-reset") return json_(requestPasswordReset_(body));
+    if (action === "confirm-password-reset") return json_(confirmPasswordReset_(body));
     const identity = authenticate_(body);
     if (action === "login") { recordAccess_(identity, "login"); return json_(login_(identity)); }
     if (action === "change-password") return json_(changePassword_(identity, body.payload && body.payload.newPassword || body.newPassword));
@@ -124,6 +129,10 @@ function accessSheet_() {
   return sheetWithHeaders_("AccessLog", ACCESS_HEADERS);
 }
 
+function passwordResetSheet_() {
+  return sheetWithHeaders_("PasswordResets", PASSWORD_RESET_HEADERS);
+}
+
 function bytesToHex_(bytes) {
   return bytes.map((byte) => ((byte + 256) % 256).toString(16).padStart(2, "0")).join("");
 }
@@ -191,6 +200,12 @@ function authenticate_(body) {
   return { ...identity, displayName: match.user.displayName, role: match.user.role };
 }
 
+function identityFromUsername_(value) {
+  const username = String(value || "").trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) throw new Error("Informe um usuário válido.");
+  return { username, accountId: checksum_(username) };
+}
+
 function requireAdmin_(identity) {
   if (identity.role !== "admin") throw new Error("Acesso administrativo não autorizado.");
 }
@@ -233,6 +248,28 @@ function provisionAdminFromScriptProperties() {
   }
 }
 
+/**
+ * Promove uma conta já existente sem alterar sua senha. Defina somente
+ * ADMIN_PROMOTE_USERNAME nas Script Properties, execute esta função e remova
+ * a propriedade depois. É a opção apropriada para conceder administração ao
+ * proprietário atual da contabilidade.
+ */
+function promoteExistingAdminFromScriptProperties() {
+  const properties = PropertiesService.getScriptProperties();
+  const identity = identityFromUsername_(properties.getProperty("ADMIN_PROMOTE_USERNAME"));
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const match = findUser_(identity);
+    if (!match || match.user.status !== "active") throw new Error("Usuário ativo não encontrado para promoção.");
+    usersSheet_().getRange(match.rowNumber, 9).setValue("admin");
+    properties.deleteProperty("ADMIN_PROMOTE_USERNAME");
+    return { ok: true, username: identity.username, role: "admin", promotedAt: new Date().toISOString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function changePassword_(identity, newPasswordValue) {
   const newPassword = validatePassword_(newPasswordValue);
   const lock = LockService.getScriptLock();
@@ -245,6 +282,85 @@ function changePassword_(identity, newPasswordValue) {
     const sheet = usersSheet_();
     sheet.getRange(match.rowNumber, 4, 1, 4).setValues([[salt, passwordVerifier_(salt, newPassword), match.user.createdAt, now]]);
     return { ok: true, username: identity.username, passwordChangedAt: now };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function vaultForAccount_(identity) {
+  const row = currentRows_(currentSheet_()).map((item) => parseRow_(item, "current")).find((item) => item && item.accountId === identity.accountId && item.username === identity.username);
+  return row && row.payload && typeof row.payload === "object" ? row.payload : null;
+}
+
+function resetRows_() {
+  const sheet = passwordResetSheet_();
+  const lastRow = sheet.getLastRow();
+  return lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, PASSWORD_RESET_HEADERS.length).getValues();
+}
+
+function passwordResetUrl_(username, token) {
+  const appUrl = String(PropertiesService.getScriptProperties().getProperty("APP_PUBLIC_URL") || "").trim();
+  if (!/^https:\/\//i.test(appUrl)) throw new Error("O serviço de recuperação ainda não foi configurado.");
+  return appUrl.replace(/#.*$/, "") + "#recuperar?u=" + encodeURIComponent(username) + "&t=" + encodeURIComponent(token);
+}
+
+function requestPasswordReset_(body) {
+  const identity = identityFromUsername_(body.username);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const match = findUser_(identity);
+    // Para evitar enumeração, contas inexistentes e inativas recebem a mesma
+    // resposta neutra das contas com e-mail configurado.
+    if (!match || match.user.status !== "active") return { ok: true, status: "sent_if_available" };
+    const profile = vaultForAccount_(identity)?.profile || {};
+    const email = String(profile.email || "").trim();
+    if (!email) return { ok: true, status: "email_missing" };
+    const properties = PropertiesService.getScriptProperties();
+    const rateKey = "PASSWORD_RESET_LAST_" + checksum_(identity.username);
+    const lastRequestAt = Number(properties.getProperty(rateKey) || 0);
+    const nowMs = Date.now();
+    if (nowMs - lastRequestAt < PASSWORD_RESET_RATE_LIMIT_MS) return { ok: true, status: "sent_if_available" };
+    const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+    const now = new Date(nowMs).toISOString();
+    const expiresAt = new Date(nowMs + PASSWORD_RESET_TTL_MS).toISOString();
+    passwordResetSheet_().appendRow([Utilities.getUuid(), identity.accountId, identity.username, checksum_(token), now, expiresAt, ""]);
+    properties.setProperty(rateKey, String(nowMs));
+    const resetUrl = passwordResetUrl_(identity.username, token);
+    MailApp.sendEmail({
+      to: email,
+      subject: "Recuperação de acesso — Minha Contabilidade",
+      htmlBody: "<p>Recebemos um pedido para redefinir sua senha.</p><p><a href=\"" + resetUrl + "\">Redefinir minha senha</a></p><p>Este link expira em 30 minutos e pode ser usado apenas uma vez. Se você não fez este pedido, ignore este e-mail.</p>",
+      body: "Recebemos um pedido para redefinir sua senha. Abra este link em até 30 minutos: " + resetUrl + "\n\nSe você não fez este pedido, ignore este e-mail."
+    });
+    return { ok: true, status: "sent_if_available" };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function confirmPasswordReset_(body) {
+  const identity = identityFromUsername_(body.username);
+  const token = String(body.token || "").trim();
+  const newPassword = validatePassword_(body.newPassword);
+  if (!/^[a-f0-9]{64}$/i.test(token)) throw new Error("Link de recuperação inválido.");
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const match = findUser_(identity);
+    if (!match || match.user.status !== "active") throw new Error("Link de recuperação inválido ou expirado.");
+    const tokenHash = checksum_(token);
+    const reset = resetRows_().map((row, index) => ({
+      rowNumber: index + 2,
+      accountId: String(row[1] || ""), username: String(row[2] || "").toLowerCase(), tokenHash: String(row[3] || ""), expiresAt: String(row[5] || ""), usedAt: String(row[6] || "")
+    })).find((item) => item.accountId === identity.accountId && item.username === identity.username && item.tokenHash === tokenHash && !item.usedAt && Date.parse(item.expiresAt) > Date.now());
+    if (!reset) throw new Error("Link de recuperação inválido ou expirado.");
+    const now = new Date().toISOString();
+    const salt = Utilities.getUuid();
+    usersSheet_().getRange(match.rowNumber, 4, 1, 4).setValues([[salt, passwordVerifier_(salt, newPassword), match.user.createdAt, now]]);
+    passwordResetSheet_().getRange(reset.rowNumber, 7).setValue(now);
+    recordAccess_(identity, "password-reset");
+    return { ok: true, passwordChangedAt: now };
   } finally {
     lock.releaseLock();
   }
