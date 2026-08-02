@@ -58,6 +58,8 @@
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const encoder = new TextEncoder();
   let authMode = "login";
+  let passwordRecoveryToken = null;
+  let passwordRecoveryUsername = null;
   let session = null;
   let vault = null;
   let saveQueue = Promise.resolve();
@@ -389,7 +391,7 @@
     reader.onload = () => {
       const dialog = document.createElement("dialog");
       dialog.className = "photo-editor-dialog";
-      dialog.innerHTML = `<form method="dialog" class="photo-editor"><div><p class="eyebrow">FOTO DO PERFIL</p><h3>Ajuste o enquadramento</h3><p class="settings-copy">Use os controles para definir a área que aparecerá no seu perfil.</p></div><div class="photo-editor-preview" aria-label="Prévia da foto"></div><label class="field"><span>Zoom</span><input name="zoom" type="range" min="1" max="3" step="0.01" value="1" /></label><label class="field"><span>Posição horizontal</span><input name="x" type="range" min="0" max="1" step="0.01" value="0.5" /></label><label class="field"><span>Posição vertical</span><input name="y" type="range" min="0" max="1" step="0.01" value="0.5" /></label><div class="profile-photo-actions"><button class="button button--secondary" value="cancel">Cancelar</button><button class="button button--primary" value="apply">Aplicar foto</button></div></form>`;
+      dialog.innerHTML = `<form method="dialog" class="photo-editor"><div><p class="eyebrow">FOTO DO PERFIL</p><h3>Ajuste o enquadramento</h3><p class="settings-copy">Arraste a foto na grade ou use os controles para centralizar o que aparecerá no seu perfil.</p></div><div class="photo-editor-preview" aria-label="Prévia da foto. Arraste para ajustar o enquadramento" role="application" tabindex="0"></div><label class="field"><span>Zoom</span><input name="zoom" type="range" min="1" max="3" step="0.01" value="1" /></label><label class="field"><span>Posição horizontal</span><input name="x" type="range" min="0" max="1" step="0.01" value="0.5" /></label><label class="field"><span>Posição vertical</span><input name="y" type="range" min="0" max="1" step="0.01" value="0.5" /></label><div class="profile-photo-actions"><button class="button button--secondary" value="cancel">Cancelar</button><button class="button button--primary" value="apply">Aplicar foto</button></div></form>`;
       document.body.appendChild(dialog);
       const preview = dialog.querySelector(".photo-editor-preview");
       const updatePreview = () => {
@@ -401,6 +403,23 @@
         preview.style.backgroundPosition = `${x * 100}% ${y * 100}%`;
       };
       [dialog.elements.zoom, dialog.elements.x, dialog.elements.y].forEach((control) => control.addEventListener("input", updatePreview));
+      let drag = null;
+      preview.addEventListener("pointerdown", (event) => {
+        drag = { x: event.clientX, y: event.clientY, positionX: Number(dialog.elements.x.value), positionY: Number(dialog.elements.y.value) };
+        preview.setPointerCapture(event.pointerId);
+        preview.classList.add("is-dragging");
+      });
+      preview.addEventListener("pointermove", (event) => {
+        if (!drag) return;
+        const size = Math.max(1, preview.getBoundingClientRect().width);
+        const available = Math.max(.01, Number(dialog.elements.zoom.value) - 1);
+        dialog.elements.x.value = String(Math.max(0, Math.min(1, drag.positionX - (event.clientX - drag.x) / size / available)));
+        dialog.elements.y.value = String(Math.max(0, Math.min(1, drag.positionY - (event.clientY - drag.y) / size / available)));
+        updatePreview();
+      });
+      const stopDragging = () => { drag = null; preview.classList.remove("is-dragging"); };
+      preview.addEventListener("pointerup", stopDragging);
+      preview.addEventListener("pointercancel", stopDragging);
       updatePreview();
       dialog.addEventListener("close", async () => {
         try {
@@ -446,6 +465,21 @@
     const result = await response.json();
     if (!response.ok || result.ok === false || result.error || Number(result.statusCode) >= 400) throw new Error(result.error || "Não foi possível falar com o armazenamento online.");
     return result;
+  }
+
+  async function remotePublicRequest(action, payload) {
+    if (!CONFIG.apiUrl) throw new Error("O endpoint online ainda não foi configurado.");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...payload }), signal: controller.signal });
+      const result = await response.json();
+      if (!response.ok || result.ok === false || result.error || Number(result.statusCode) >= 400) throw new Error(result.error || "Não foi possível concluir esta solicitação.");
+      return result;
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("O armazenamento online demorou demais para responder.");
+      throw error.message ? error : new Error("Não foi possível alcançar o armazenamento online.");
+    } finally { window.clearTimeout(timeout); }
   }
 
   async function openRemoteAccount(username, password, displayName, signup) {
@@ -503,6 +537,27 @@
     $("#authModeToggle").textContent = signup ? "Já tenho uma conta" : "Criar uma conta";
     $("#confirmPasswordField").classList.toggle("is-hidden", !signup);
     $("#authPassword").setAttribute("autocomplete", signup ? "new-password" : "current-password");
+    $("#authPassword").type = "password";
+    const passwordToggle = $("#authPasswordToggle");
+    passwordToggle.setAttribute("aria-label", "Mostrar senha");
+    passwordToggle.setAttribute("aria-pressed", "false");
+    passwordToggle.title = "Mostrar senha";
+    $("#authForm").classList.remove("is-hidden");
+    $("#passwordRecoveryRequestForm").classList.add("is-hidden");
+    $("#passwordRecoveryConfirmForm").classList.add("is-hidden");
+    $("#authModeToggle").classList.remove("is-hidden");
+    $("#forgotPasswordButton").classList.toggle("is-hidden", signup);
+    $("#authBackButton").classList.add("is-hidden");
+    setAuthNotice("");
+  }
+
+  function setPasswordRecoveryMode(mode) {
+    $("#authForm").classList.add("is-hidden");
+    $("#passwordRecoveryRequestForm").classList.toggle("is-hidden", mode !== "request");
+    $("#passwordRecoveryConfirmForm").classList.toggle("is-hidden", mode !== "confirm");
+    $("#authModeToggle").classList.add("is-hidden");
+    $("#forgotPasswordButton").classList.add("is-hidden");
+    $("#authBackButton").classList.remove("is-hidden");
     setAuthNotice("");
   }
 
@@ -1591,6 +1646,31 @@
     }
   }
 
+  async function handlePasswordRecoveryRequest(event) {
+    event.preventDefault();
+    const username = String(new FormData(event.currentTarget).get("username") || "").trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) { setAuthNotice("Informe um usuário válido."); return; }
+    setAuthNotice("Verificando recuperação…");
+    try {
+      const result = await remotePublicRequest("request-password-reset", { username });
+      setAuthNotice(result.status === "email_missing" ? "Este usuário infelizmente não possui e-mail de verificação cadastrado." : "Se houver um e-mail cadastrado para este usuário, enviamos um link de recuperação.", result.status !== "email_missing");
+    } catch (error) { setAuthNotice(error.message || "Não foi possível solicitar a recuperação."); }
+  }
+
+  async function handlePasswordRecoveryConfirm(event) {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+    if (!passwordRecoveryUsername || !passwordRecoveryToken) { setAuthNotice("Link de recuperação inválido."); return; }
+    if (data.newPassword !== data.newPasswordConfirm) { setAuthNotice("As senhas não conferem."); return; }
+    setAuthNotice("Atualizando senha…");
+    try {
+      await remotePublicRequest("confirm-password-reset", { username: passwordRecoveryUsername, token: passwordRecoveryToken, newPassword: data.newPassword });
+      passwordRecoveryToken = null; passwordRecoveryUsername = null;
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+      setAuthMode("login"); setAuthNotice("Senha atualizada. Entre com a nova senha.", true);
+    } catch (error) { setAuthNotice(error.message || "Não foi possível atualizar a senha."); }
+  }
+
   async function handlePasswordSubmit(event) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -2056,8 +2136,20 @@
 
   function bindEvents() {
     $("#authForm").addEventListener("submit", handleAuthSubmit);
+    $("#passwordRecoveryRequestForm").addEventListener("submit", handlePasswordRecoveryRequest);
+    $("#passwordRecoveryConfirmForm").addEventListener("submit", handlePasswordRecoveryConfirm);
+    $("#authPasswordToggle").addEventListener("click", () => {
+      const password = $("#authPassword");
+      const isVisible = password.type === "text";
+      password.type = isVisible ? "password" : "text";
+      $("#authPasswordToggle").setAttribute("aria-label", isVisible ? "Mostrar senha" : "Ocultar senha");
+      $("#authPasswordToggle").setAttribute("aria-pressed", String(!isVisible));
+      $("#authPasswordToggle").title = isVisible ? "Mostrar senha" : "Ocultar senha";
+    });
     $("#passwordForm").addEventListener("submit", handlePasswordSubmit);
     $("#authModeToggle").addEventListener("click", () => setAuthMode(authMode === "login" ? "signup" : "login"));
+    $("#forgotPasswordButton").addEventListener("click", () => setPasswordRecoveryMode("request"));
+    $("#authBackButton").addEventListener("click", () => { passwordRecoveryToken = null; passwordRecoveryUsername = null; window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`); setAuthMode("login"); });
     $("#logoutButton").addEventListener("click", leaveApp);
     $("#menuButton").addEventListener("click", () => $("#sidebar").classList.toggle("is-open"));
     $("#periodSelect").addEventListener("change", renderAll);
@@ -2126,6 +2218,14 @@
     bindEvents();
     setupPeriodSelect();
     fillDefaultForms();
+    const recovery = window.location.hash.match(/^#recuperar\?(.+)$/);
+    if (recovery) {
+      const parameters = new URLSearchParams(recovery[1]);
+      passwordRecoveryUsername = String(parameters.get("u") || "").trim().toLowerCase();
+      passwordRecoveryToken = String(parameters.get("t") || "").trim();
+      if (/^[a-z0-9._-]{3,32}$/.test(passwordRecoveryUsername) && /^[a-f0-9]{64}$/i.test(passwordRecoveryToken)) setPasswordRecoveryMode("confirm");
+      else setAuthNotice("Link de recuperação inválido.");
+    }
     const hashView = window.location.hash.replace("#", "");
     if (VIEWS[hashView] || hashView === "cdb") setView(hashView);
   }
