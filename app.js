@@ -12,7 +12,8 @@
     investimentos: "Investimentos",
     patrimonio: "Patrimônio",
     analises: "Análises",
-    configuracoes: "Configurações"
+    configuracoes: "Configurações",
+    administracao: "Administração"
   };
   const UNAVAILABLE_CATEGORY = "Categoria não disponível no sistema";
   const ALL_PERIODS = "todos";
@@ -60,6 +61,7 @@
   let session = null;
   let vault = null;
   let saveQueue = Promise.resolve();
+  let adminDashboard = null;
   const tableSort = {};
 
   // Sem cache de dados financeiros: somente consultamos o manifesto público para
@@ -413,7 +415,7 @@
     if (password.length < 8) throw new Error("A senha precisa ter pelo menos 8 caracteres.");
     const identity = { accountId: await remoteAccountId(cleanUsername), username: cleanUsername, password };
     const result = await remoteRequest(signup ? "register" : "login", identity);
-    session = { mode: "online", ...identity, revision: Number(result.revision || 0) };
+    session = { mode: "online", ...identity, role: result.role === "admin" ? "admin" : "user", revision: Number(result.revision || 0) };
     vault = normalizeVault(result.payload || blankVault(result.displayName || displayName || cleanUsername));
     if (!result.payload) await saveCurrentVault();
     return { online: true, recovered: Boolean(result.recovered) };
@@ -471,7 +473,8 @@
     const displayName = vault.profile.displayName || session.username || "Usuário";
     $("#sidebarUserName").textContent = displayName;
     setSidebarAvatar();
-    $("#sidebarUserMode").textContent = "planilha sincronizada";
+    $("#sidebarUserMode").textContent = session.role === "admin" ? "administrador" : "planilha sincronizada";
+    $("#adminNavItem").classList.toggle("is-hidden", session.role !== "admin");
     $("#syncBadge").innerHTML = '<span class="status-dot status-dot--green"></span>sincronizado';
     setView("dashboard");
     renderAll();
@@ -481,6 +484,8 @@
   function leaveApp() {
     session = null;
     vault = null;
+    adminDashboard = null;
+    $("#adminNavItem").classList.add("is-hidden");
     $("#appShell").classList.add("is-hidden");
     $("#authScreen").classList.remove("is-hidden");
     $("#authForm").reset();
@@ -489,13 +494,15 @@
 
   function setView(viewName) {
     const normalizedView = viewName === "investimentos" ? "cdb" : viewName;
-    const view = VIEWS[normalizedView] ? normalizedView : "dashboard";
+    const requestedView = VIEWS[normalizedView] ? normalizedView : "dashboard";
+    const view = requestedView === "administracao" && session?.role !== "admin" ? "dashboard" : requestedView;
     $$("[data-view]").forEach((item) => item.classList.toggle("is-active", item.dataset.view === view));
     $$("[data-view-target]").forEach((item) => item.classList.toggle("is-active", item.dataset.viewTarget === view));
     $("#pageTitle").textContent = VIEWS[view];
     $("#sidebar").classList.remove("is-open");
     window.history.replaceState({}, "", `#${view}`);
     renderAll();
+    if (view === "administracao") refreshAdminDashboard();
   }
 
   function currentPeriod() {
@@ -1284,6 +1291,60 @@
     $("#storageDetail").textContent = "A planilha online é a fonte oficial dos seus dados.";
   }
 
+  function adminMetric(label, value, detail = "") {
+    return `<article class="metric-card metric-card--accent"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong>${detail ? `<span class="metric-meta">${escapeHtml(detail)}</span>` : ""}</article>`;
+  }
+
+  function adminNumber(value) {
+    return integerFormatter.format(Math.max(0, Number(value) || 0));
+  }
+
+  function renderAdminDashboard() {
+    if (session?.role !== "admin") return;
+    const metrics = $("#adminMetrics");
+    const notice = $("#adminNotice");
+    if (!adminDashboard) {
+      metrics.innerHTML = `<div class="empty-state"><strong>Carregando indicadores administrativos…</strong><span>Consultando apenas métricas agregadas.</span></div>`;
+      $("#adminActivityChart").innerHTML = "";
+      $("#adminUsersTable").innerHTML = "";
+      $("#adminSystemTable").innerHTML = "";
+      return;
+    }
+    const summary = adminDashboard.summary || {};
+    metrics.innerHTML = [
+      adminMetric("VISITAS", adminNumber(summary.visits), "visitas registradas"),
+      adminMetric("USUÁRIOS", adminNumber(summary.users), "contas cadastradas"),
+      adminMetric("ATIVOS", adminNumber(summary.activeUsers), "atividade recente"),
+      adminMetric("NOVOS CADASTROS", adminNumber(summary.newUsers), "período selecionado")
+    ].join("");
+    const activity = Array.isArray(adminDashboard.activity) ? adminDashboard.activity.slice(-12) : [];
+    const maxActivity = Math.max(1, ...activity.map((item) => Number(item.visits) || 0));
+    $("#adminActivityChart").innerHTML = activity.length ? `<div class="admin-chart-bars">${activity.map((item) => {
+      const label = `${item.label || "Período"}: ${adminNumber(item.visits)} visitas`;
+      return `<div class="admin-chart-column"><div class="admin-chart-bar chart-bar-interactive" style="height:${Math.max(4, Math.round((Number(item.visits) || 0) / maxActivity * 100))}%" tabindex="0" role="img" aria-label="${escapeHtml(label)}"><span class="chart-tooltip" role="tooltip">${escapeHtml(label)}</span></div><small>${escapeHtml(item.label || "—")}</small></div>`;
+    }).join("")}</div>` : `<div class="empty-state"><strong>Sem atividade agregada disponível.</strong><span>Os dados aparecerão após o backend registrar acessos.</span></div>`;
+    const users = Array.isArray(adminDashboard.users) ? adminDashboard.users : [];
+    $("#adminUsersTable").innerHTML = users.length ? `<table class="data-table"><thead><tr><th>USUÁRIO</th><th>CADASTRO</th><th>ÚLTIMO ACESSO</th><th>STATUS</th></tr></thead><tbody>${users.map((user) => `<tr><td><strong>${escapeHtml(user.username || "—")}</strong></td><td>${escapeHtml(user.createdAt || "—")}</td><td>${escapeHtml(user.lastLoginAt || "—")}</td><td><span class="status-pill ${user.active === false ? "status-pill--muted" : "status-pill--green"}">${user.active === false ? "INATIVO" : "ATIVO"}</span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum usuário para listar.</strong><span>O backend pode retornar somente identificadores e datas administrativas.</span></div>`;
+    const system = Array.isArray(adminDashboard.system) ? adminDashboard.system : [];
+    $("#adminSystemTable").innerHTML = system.length ? `<table class="data-table"><thead><tr><th>INDICADOR</th><th>STATUS</th><th>DETALHE</th></tr></thead><tbody>${system.map((item) => `<tr><td><strong>${escapeHtml(item.label || "—")}</strong></td><td><span class="status-pill ${item.status === "ok" ? "status-pill--green" : "status-pill--muted"}">${escapeHtml(String(item.status || "indefinido").toUpperCase())}</span></td><td>${escapeHtml(item.detail || "—")}</td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Sem indicadores adicionais.</strong><span>A saúde do serviço será exibida quando o backend enviar métricas.</span></div>`;
+    notice.textContent = adminDashboard.generatedAt ? `Indicadores atualizados em ${adminDashboard.generatedAt}.` : "Indicadores administrativos agregados.";
+    enhanceSortableTables();
+  }
+
+  async function refreshAdminDashboard() {
+    if (session?.role !== "admin") return;
+    const notice = $("#adminNotice");
+    notice.textContent = "Atualizando indicadores…";
+    try {
+      const result = await remoteRequest("admin-dashboard", session, {});
+      adminDashboard = result.dashboard || result.payload || {};
+      renderAdminDashboard();
+    } catch (error) {
+      notice.textContent = error.message || "Não foi possível atualizar o painel administrativo.";
+      if (!adminDashboard) renderAdminDashboard();
+    }
+  }
+
   function renderCustomCategories() {
     const list = $("#customCategoriesList");
     if (!list) return;
@@ -1384,6 +1445,7 @@
     renderPatrimony();
     renderAnalyses();
     renderSettings();
+    renderAdminDashboard();
     enhanceSortableTables();
   }
 
@@ -1999,6 +2061,7 @@
         return;
       }
       if (action === "open-transaction") { setView("lancamentos"); window.setTimeout(() => $("#transactionFormPanel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); }
+      if (action === "refresh-admin-dashboard") { await refreshAdminDashboard(); return; }
       if (action === "export-ai-report") exportAiReport();
       if (action === "clear-all") await clearAllData();
       if (action === "remove-profile-photo") await removeProfilePhoto();
