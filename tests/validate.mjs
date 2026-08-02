@@ -72,6 +72,14 @@ assert.match(js, /SALARY_CATEGORIES\s*=\s*\[/, "as categorias salariais precisam
 assert.match(js, /TRANSPORT_CATEGORIES\s*=\s*\[/, "as categorias de transporte precisam compartilhar um agrupamento central");
 assert.match(js, /function categoryGroupTotalForPeriod/, "a análise mensal precisa calcular grupos de categorias");
 assert.match(js, /function essentialMonthlyCosts/, "a análise mensal precisa consolidar transporte, alimentação e salários");
+assert.match(js, /ALL_PERIODS\s*=\s*["']todos["']/, "o filtro de período precisa oferecer Todos");
+assert.match(js, /<option value="\$\{ALL_PERIODS\}">Todos<\/option>/, "Todos precisa estar disponível no seletor de período");
+assert.match(js, /function trendPeriods/, "as análises precisam montar a série histórica para Todos");
+assert.match(js, /aporteCount/, "as análises precisam contar aportes");
+assert.match(js, /resgateCount/, "as análises precisam contar retiradas");
+assert.match(html, /analysisInvestmentCountChart/, "as análises precisam exibir gráfico de quantidade de movimentações de investimento");
+assert.match(html, /<title>MINHA CONTABILIDADE<\/title>/, "o título da aba precisa usar MINHA CONTABILIDADE");
+assert.match(html, /favicon\.svg/, "a aba precisa usar o ícone do aplicativo");
 assert.match(js, /!item\.transferId && !item\.investmentOperationId/, "a análise por grupos deve excluir transferências e investimentos");
 assert.match(js, /categoryGroupTotalForPeriod\(period, SALARY_CATEGORIES, "entrada"\)/, "salários recebidos devem considerar apenas entradas");
 assert.ok(js.includes('const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => !SALARY_CATEGORIES.includes(category));'), "categorias de salário devem ficar fora dos custos fixos");

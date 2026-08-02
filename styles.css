@@ -295,6 +295,12 @@ h1, h2, h3, strong { font-family: var(--display); }
 .analysis-bar { width: min(31px, 42%); min-height: 3px; }
 .analysis-bar--positive { background: #76bca5; }
 .analysis-bar--negative { background: #ed8a96; }
+.investment-count-legend { display: flex; gap: 16px; margin: -4px 0 9px; color: var(--muted); font-size: 10px; }
+.investment-count-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.investment-count-dot { width: 8px; height: 8px; }
+.investment-count-dot--aporte, .investment-count-bar--aporte { background: #76bca5; }
+.investment-count-dot--resgate, .investment-count-bar--resgate { background: #ed8a96; }
+.investment-count-chart { min-width: 0; }
 .analysis-bar-label { position: absolute; bottom: -24px; color: var(--muted); font-size: 10px; }
 .analysis-categories { display: grid; gap: 14px; }
 .analysis-category { display: grid; grid-template-columns: minmax(75px, .55fr) 1fr auto; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
