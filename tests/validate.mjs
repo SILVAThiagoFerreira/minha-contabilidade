@@ -144,6 +144,7 @@ assert.match(js, /monitorPublishedRelease/, "o frontend precisa detectar uma nov
 assert.match(js, /admin-dashboard/, "o painel administrativo precisa consultar indicadores pelo backend");
 assert.match(js, /session\?\.role !== "admin"/, "o painel administrativo precisa ser protegido por papel de sessão");
 assert.match(js, /function refreshAdminDashboard/, "o painel administrativo precisa atualizar os indicadores");
+assert.match(js, /function adminMetric[\s\S]*<p class="metric-label">[\s\S]*<div class="metric-value">/, "os indicadores administrativos precisam separar rótulo e valor em blocos");
 assert.match(html, /Nenhum lançamento, saldo ou dado financeiro individual/, "o painel administrativo não deve exibir dados financeiros individuais");
 assert.match(html, /profilePhotoInput/, "as configurações precisam permitir selecionar uma foto de perfil");
 assert.match(html, /authPasswordToggle/, "a tela de acesso precisa permitir mostrar ou ocultar a senha digitada");
@@ -159,6 +160,7 @@ assert.match(js, /resizeProfilePhoto/, "a foto precisa ser reduzida antes da sin
 assert.match(js, /typeof createImageBitmap === "function"/, "o upload de foto precisa ter alternativa para navegadores sem createImageBitmap");
 assert.match(js, /previousPhoto = vault\.profile\.avatarDataUrl/, "o upload precisa preservar a foto anterior quando a sincronização falhar");
 assert.match(js, /MAX_VAULT_PAYLOAD_CHARS = 49000/, "o cliente precisa usar o limite de cofre compatível com fotos compactadas");
+assert.match(js, /PROFILE_PHOTO_SYNC_COMPATIBLE_PAYLOAD_CHARS = 45000/, "a foto precisa manter compatibilidade com a versão anterior da sincronização");
 assert.match(js, /pointerdown/, "o enquadramento da foto precisa permitir ajuste direto na grade");
 assert.match(js, /removeProfilePhoto/, "a foto do perfil precisa poder ser removida");
 assert.match(js, /normalizeProfileEmail/, "o e-mail do perfil precisa ser validado no frontend");
