@@ -15,6 +15,7 @@
     configuracoes: "Configurações"
   };
   const UNAVAILABLE_CATEGORY = "Categoria não disponível no sistema";
+  const ALL_PERIODS = "todos";
   const MAX_CUSTOM_CATEGORIES = 100;
   const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
   const CATEGORIES = [
@@ -373,12 +374,20 @@
     return $("#periodSelect").value || monthKey();
   }
 
+  function isAllPeriods(period = currentPeriod()) {
+    return period === ALL_PERIODS;
+  }
+
+  function periodLabel(period = currentPeriod()) {
+    return isAllPeriods(period) ? "todos os períodos" : monthLabel(period);
+  }
+
   function setupPeriodSelect() {
     const select = $("#periodSelect");
     const selected = select.value || monthKey();
     const options = Array.from({ length: 13 }, (_, index) => shiftMonth(monthKey(), -index));
-    select.innerHTML = options.map((key) => `<option value="${key}">${monthLabel(key)}</option>`).join("");
-    select.value = options.includes(selected) ? selected : options[0];
+    select.innerHTML = [`<option value="${ALL_PERIODS}">Todos</option>`, ...options.map((key) => `<option value="${key}">${monthLabel(key)}</option>`)].join("");
+    select.value = selected === ALL_PERIODS || options.includes(selected) ? selected : options[0];
   }
 
   function populateSelect(select, options, selected = "") {
@@ -405,7 +414,7 @@
   }
 
   function transactionsForPeriod(period = currentPeriod()) {
-    return vault.transactions.filter((item) => String(item.date || "").startsWith(period));
+    return vault.transactions.filter((item) => isAllPeriods(period) || String(item.date || "").startsWith(period));
   }
 
   function sumTransactions(items, type) {
@@ -568,8 +577,8 @@
     const declaredPatrimony = totalPatrimony();
     const displayName = vault.profile.displayName || "você";
     $("#dashboardGreeting").textContent = `Olá, ${displayName.split(" ")[0]}.`;
-    $("#dashboardLead").textContent = `Este é o retrato do seu dinheiro em ${monthLabel(period)}.`;
-    $("#cashflowPeriod").textContent = monthLabel(period);
+    $("#dashboardLead").textContent = `Este é o retrato do seu dinheiro em ${periodLabel(period)}.`;
+    $("#cashflowPeriod").textContent = periodLabel(period);
     $("#dashboardMetrics").innerHTML = [
       metricCard("SALDO CONSOLIDADO", formatShortCurrency(totalBalance()), "saldo calculado das contas", "metric-card--accent"),
       metricCard("ENTRADAS", formatShortCurrency(income), "no período selecionado", "metric-card--positive"),
@@ -590,7 +599,7 @@
   }
 
   function renderCashflow() {
-    const months = Array.from({ length: 6 }, (_, index) => shiftMonth(currentPeriod(), index - 5));
+    const months = trendPeriods();
     const values = months.map((period) => {
       const items = transactionsForPeriod(period);
       return { period, income: sumTransactions(items, "entrada"), expense: sumTransactions(items, "saida") };
@@ -640,7 +649,7 @@
       const actions = item.investmentOperationId ? `<span class="status-pill status-pill--muted" title="Movimentação controlada pela carteira de investimentos">INVESTIMENTO</span>` : item.transferId ? transferLabel : `<span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span>`;
       const description = transfer ? `${escapeHtml(transfer.description || "Transferência entre contas")}<br><small class="muted-cell">${item.transferRole === "origem" ? `para ${escapeHtml(accountNames[transfer.destinationAccountId] || "outra conta")}` : `de ${escapeHtml(accountNames[transfer.sourceAccountId] || "outra conta")}`}</small>` : `<strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}`;
       return `<tr><td>${formatDate(item.date)}</td><td>${description}</td><td>${transfer ? transferLabel : escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td>${actions}</td></tr>`;
-    }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${monthLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
+    }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${periodLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
   }
 
   function renderAccounts() {
@@ -703,10 +712,11 @@
   }
 
   function renderFixedCosts() {
-    const stats = fixedCostStats();
+    const agendaPeriod = isAllPeriods() ? monthKey() : currentPeriod();
+    const stats = fixedCostStats(agendaPeriod);
     $("#fixedMetrics").innerHTML = [metricCard("CUSTO FIXO NO MÊS", formatShortCurrency(stats.total), `${stats.items.length} compromisso(s) ativo(s)`, "metric-card--accent"), metricCard("JÁ PAGUEI", formatShortCurrency(stats.paid), "referência marcada na agenda", "metric-card--positive"), metricCard("VOU PAGAR", formatShortCurrency(stats.pending), "ainda não concluído", "metric-card--warning")].join("");
-    $("#fixedAgendaPeriod").textContent = monthLabel(currentPeriod());
-    $("#fixedAgendaTable").innerHTML = stats.items.length ? `<table class="data-table fixed-agenda-table"><thead><tr><th>VENC.</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>VALOR</th><th>STATUS</th><th></th></tr></thead><tbody>${stats.items.map((item) => `<tr class="${item.paid ? "is-completed" : ""}"><td>Dia ${escapeHtml(item.dueDay)}</td><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.category || "Custo fixo")}</td><td class="number">${formatCurrency(item.amount)}</td><td><span class="status-pill ${item.paid ? "status-pill--green" : "status-pill--yellow"}">${item.paid ? "CONCLUÍDO" : "A PAGAR"}</span></td><td><button class="agenda-toggle ${item.paid ? "is-completed" : ""}" type="button" data-action="toggle-fixed-payment" data-id="${item.id}" aria-pressed="${item.paid}">${item.paid ? "Desmarcar" : "Concluído"}</button></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum custo fixo ativo para ${monthLabel(currentPeriod()).toLowerCase()}.</strong><span>Cadastre um compromisso abaixo para montar sua agenda mensal.</span></div>`;
+    $("#fixedAgendaPeriod").textContent = isAllPeriods() ? `${monthLabel(agendaPeriod)} · agenda mensal` : monthLabel(agendaPeriod);
+    $("#fixedAgendaTable").innerHTML = stats.items.length ? `<table class="data-table fixed-agenda-table"><thead><tr><th>VENC.</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>VALOR</th><th>STATUS</th><th></th></tr></thead><tbody>${stats.items.map((item) => `<tr class="${item.paid ? "is-completed" : ""}"><td>Dia ${escapeHtml(item.dueDay)}</td><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.category || "Custo fixo")}</td><td class="number">${formatCurrency(item.amount)}</td><td><span class="status-pill ${item.paid ? "status-pill--green" : "status-pill--yellow"}">${item.paid ? "CONCLUÍDO" : "A PAGAR"}</span></td><td><button class="agenda-toggle ${item.paid ? "is-completed" : ""}" type="button" data-action="toggle-fixed-payment" data-id="${item.id}" aria-pressed="${item.paid}">${item.paid ? "Desmarcar" : "Concluído"}</button></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum custo fixo ativo para ${monthLabel(agendaPeriod).toLowerCase()}.</strong><span>Cadastre um compromisso abaixo para montar sua agenda mensal.</span></div>`;
     const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
     const items = vault.fixedCosts.slice().sort((a, b) => Number(a.dueDay) - Number(b.dueDay));
     $("#fixedCostTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>VENC.</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th>STATUS</th><th></th></tr></thead><tbody>${items.map((item) => `<tr><td>Dia ${escapeHtml(item.dueDay)}</td><td><strong>${escapeHtml(item.name)}</strong></td><td>${escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number">${formatCurrency(item.amount)}</td><td><span class="status-pill ${item.active !== false ? "status-pill--green" : "status-pill--muted"}">${item.active !== false ? "ATIVO" : "PAUSADO"}</span></td><td><span class="table-actions"><button class="table-action" type="button" data-action="edit-fixed" data-id="${item.id}" title="Editar custo fixo" aria-label="Editar custo fixo">✎</button><button class="table-action" type="button" data-action="toggle-fixed" data-id="${item.id}" title="Ativar ou pausar" aria-label="Ativar ou pausar">↻</button><button class="table-action" type="button" data-action="delete-fixed" data-id="${item.id}" title="Excluir" aria-label="Excluir custo fixo">×</button></span></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum custo fixo cadastrado.</strong><span>Registre aluguel, assinaturas, contas e outros compromissos mensais.</span></div>`;
@@ -744,13 +754,20 @@
   }
 
   function getMonthlySummary(count = 6) {
-    return Array.from({ length: count }, (_, index) => {
-      const period = shiftMonth(currentPeriod(), index - (count - 1));
+    return trendPeriods(count).map((period) => {
       const items = transactionsForPeriod(period).filter((item) => !item.investmentOperationId);
       const income = sumTransactions(items, "entrada");
       const expense = sumTransactions(items, "saida");
       return { period, income, expense, result: income - expense, rate: income ? (income - expense) / income * 100 : 0, ...investmentFlowForPeriod(period) };
     });
+  }
+
+  function trendPeriods(count = 6) {
+    if (isAllPeriods()) {
+      const periods = [...new Set(vault.transactions.map((item) => String(item?.date || "").slice(0, 7)).filter((period) => /^\d{4}-(0[1-9]|1[0-2])$/.test(period)))].sort();
+      return periods.length ? periods : [monthKey()];
+    }
+    return Array.from({ length: count }, (_, index) => shiftMonth(currentPeriod(), index - (count - 1)));
   }
 
   function categoryGroupTotalForPeriod(period, categories, type) {
@@ -760,8 +777,7 @@
   }
 
   function essentialMonthlyCosts(count = 6) {
-    return Array.from({ length: count }, (_, index) => {
-      const period = shiftMonth(currentPeriod(), index - (count - 1));
+    return trendPeriods(count).map((period) => {
       return {
         period,
         transport: categoryGroupTotalForPeriod(period, TRANSPORT_CATEGORIES, "saida"),
@@ -779,9 +795,11 @@
     const grouped = expenseItems.reduce((map, item) => { map[item.category] = (map[item.category] || 0) + toAmount(item.amount); return map; }, {});
     const topCategory = Object.entries(grouped).sort((a, b) => b[1] - a[1])[0];
     const selectedMonth = months[months.length - 1];
+    const selectedFlow = isAllPeriods() ? months.reduce((total, item) => ({ ...total, aportes: total.aportes + item.aportes, resgates: total.resgates + item.resgates, net: total.net + item.net, count: total.count + item.count, aporteCount: total.aporteCount + item.aporteCount, resgateCount: total.resgateCount + item.resgateCount }), { aportes: 0, resgates: 0, net: 0, count: 0, aporteCount: 0, resgateCount: 0 }) : selectedMonth;
+    const selectedLabel = isAllPeriods() ? "todos os períodos" : monthLabel(selectedMonth.period);
     const savings = selectedMonth.income ? Math.round(selectedMonth.rate) : 0;
-    const investmentRelation = selectedMonth.aportes ? `${Math.round(selectedMonth.resgates / selectedMonth.aportes * 100)}% dos aportes` : selectedMonth.resgates ? "resgates sem aporte no mês" : "sem movimentação no mês";
-    const investmentNetLabel = selectedMonth.net >= 0 ? `aplicação líquida de ${formatCurrency(selectedMonth.net)}` : `resgate líquido de ${formatCurrency(Math.abs(selectedMonth.net))}`;
+    const investmentRelation = selectedFlow.aportes ? `${Math.round(selectedFlow.resgates / selectedFlow.aportes * 100)}% dos aportes` : selectedFlow.resgates ? "resgates sem aporte" : "sem movimentação";
+    const investmentNetLabel = selectedFlow.net >= 0 ? `aplicação líquida de ${formatCurrency(selectedFlow.net)}` : `resgate líquido de ${formatCurrency(Math.abs(selectedFlow.net))}`;
     const invested = totalInvested();
     const investmentValue = totalInvestmentValue();
     const declaredPatrimony = totalPatrimony();
@@ -789,10 +807,10 @@
     const netWorth = totalBalance() + investmentValue + declaredPatrimony - debt;
     const selectedEssentialCosts = essentialCosts[essentialCosts.length - 1];
     $("#analysisHighlights").innerHTML = [
-      `<article class="insight-card"><p class="eyebrow">TAXA DE SOBRA</p><h3>${savings}%</h3><p>do que entrou em ${monthLabel(selectedMonth.period)} ficou no caixa.</p></article>`,
-      `<article class="insight-card insight-card--aporte"><p class="eyebrow">APORTE DO MÊS</p><h3>${formatShortCurrency(selectedMonth.aportes)}</h3><p>${selectedMonth.count} movimentação(ões) em investimentos.</p></article>`,
-      `<article class="insight-card insight-card--resgate"><p class="eyebrow">RESGATE DO MÊS</p><h3>${formatShortCurrency(selectedMonth.resgates)}</h3><p>${investmentRelation} retornaram ao caixa.</p></article>`,
-      `<article class="insight-card"><p class="eyebrow">APORTE X RESGATE</p><h3>${formatShortCurrency(selectedMonth.net)}</h3><p>${investmentNetLabel} em ${monthLabel(selectedMonth.period)}.</p></article>`,
+      `<article class="insight-card"><p class="eyebrow">TAXA DE SOBRA</p><h3>${savings}%</h3><p>referência do último mês com dados: ${monthLabel(selectedMonth.period)}.</p></article>`,
+      `<article class="insight-card insight-card--aporte"><p class="eyebrow">APORTES</p><h3>${formatShortCurrency(selectedFlow.aportes)}</h3><p>${selectedFlow.aporteCount} aporte(s) em ${selectedLabel}.</p></article>`,
+      `<article class="insight-card insight-card--resgate"><p class="eyebrow">RETIRADAS</p><h3>${formatShortCurrency(selectedFlow.resgates)}</h3><p>${selectedFlow.resgateCount} retirada(s); ${investmentRelation}.</p></article>`,
+      `<article class="insight-card"><p class="eyebrow">APORTE X RESGATE</p><h3>${formatShortCurrency(selectedFlow.net)}</h3><p>${investmentNetLabel} em ${selectedLabel}.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">MAIOR CATEGORIA</p><h3>${topCategory ? escapeHtml(topCategory[0]) : "—"}</h3><p>${topCategory ? `${formatCurrency(topCategory[1])} em saídas no período.` : "Cadastre saídas para descobrir."}</p></article>`,
       `<article class="insight-card"><p class="eyebrow">TRANSPORTE NO MÊS</p><h3>${formatShortCurrency(selectedEssentialCosts.transport)}</h3><p>saídas em transporte, manutenção e combustível.</p></article>`,
       `<article class="insight-card"><p class="eyebrow">ALIMENTAÇÃO NO MÊS</p><h3>${formatShortCurrency(selectedEssentialCosts.food)}</h3><p>saídas classificadas em alimentação.</p></article>`,
@@ -803,6 +821,9 @@
     ].join("");
     const max = Math.max(...months.flatMap((item) => [Math.abs(item.income), Math.abs(item.expense)]), 1);
     $("#analysisBars").innerHTML = months.map((item) => `<div class="analysis-bar-group"><div class="analysis-bar analysis-bar--positive" style="height:${Math.max(3, item.income / max * 100)}%" title="Entradas ${formatCurrency(item.income)}"></div><div class="analysis-bar analysis-bar--negative" style="height:${Math.max(3, item.expense / max * 100)}%" title="Saídas ${formatCurrency(item.expense)}"></div><span class="analysis-bar-label">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("");
+    const investmentMonths = months.filter((item) => item.count);
+    const investmentCountMax = Math.max(...investmentMonths.flatMap((item) => [item.aporteCount, item.resgateCount]), 1);
+    $("#analysisInvestmentCountChart").innerHTML = investmentMonths.length ? investmentMonths.map((item) => `<div class="analysis-bar-group"><div class="analysis-bar investment-count-bar--aporte" style="height:${Math.max(3, item.aporteCount / investmentCountMax * 100)}%" title="${item.aporteCount} aporte(s) em ${monthLabel(item.period)}"></div><div class="analysis-bar investment-count-bar--resgate" style="height:${Math.max(3, item.resgateCount / investmentCountMax * 100)}%" title="${item.resgateCount} retirada(s) em ${monthLabel(item.period)}"></div><span class="analysis-bar-label">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("") : `<div class="empty-state"><strong>Sem movimentações de investimento no período.</strong><span>Os aportes e retiradas aparecerão aqui quando forem registrados.</span></div>`;
     const totalExpense = expenseItems.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const categories = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
     $("#analysisCategories").innerHTML = categories.length ? categories.map(([category, amount]) => `<div class="analysis-category"><span>${escapeHtml(category)}</span><div class="analysis-track"><span style="width:${totalExpense ? amount / totalExpense * 100 : 0}%"></span></div><strong>${formatShortCurrency(amount)}</strong></div>`).join("") : `<div class="empty-state"><strong>Sem categorias ainda.</strong><span>Os pesos aparecerão com seus lançamentos.</span></div>`;
@@ -837,16 +858,18 @@
   }
 
   function investmentTransactionsForPeriod(period) {
-    return vault.transactions.filter((item) => item.investmentOperationId && !item.transferId && String(item.date || "").startsWith(period));
+    return vault.transactions.filter((item) => item.investmentOperationId && !item.transferId && (isAllPeriods(period) || String(item.date || "").startsWith(period)));
   }
 
   function investmentFlowForPeriod(period) {
     const items = investmentTransactionsForPeriod(period);
-    const aportes = items.filter((item) => investmentOperationType(item) === "aporte").reduce((sum, item) => sum + toAmount(item.amount), 0);
-    const resgates = items.filter((item) => investmentOperationType(item) === "resgate").reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const aporteItems = items.filter((item) => investmentOperationType(item) === "aporte");
+    const resgateItems = items.filter((item) => investmentOperationType(item) === "resgate");
+    const aportes = aporteItems.reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const resgates = resgateItems.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const net = aportes - resgates;
     const retention = aportes ? net / aportes * 100 : resgates ? -100 : 0;
-    return { period, aportes, resgates, net, retention, count: items.length };
+    return { period, aportes, resgates, net, retention, count: items.length, aporteCount: aporteItems.length, resgateCount: resgateItems.length };
   }
 
   function reportMonthKeys(items) {
@@ -1473,6 +1496,7 @@
   }
 
   async function toggleFixedPayment(fixedCostId) {
+    if (isAllPeriods()) { showToast("A agenda de custos fixos é mensal. Selecione um mês para marcar um pagamento.", "error"); return; }
     const fixedCost = vault.fixedCosts.find((item) => item.id === fixedCostId && item.active !== false);
     if (!fixedCost) return;
     const period = currentPeriod();

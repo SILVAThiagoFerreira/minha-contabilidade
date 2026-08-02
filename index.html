@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#1e2d38" />
     <meta name="description" content="Painel pessoal para organizar caixa, contas, patrimônio, custos fixos e investimentos." />
-    <title>Minha contabilidade</title>
+    <title>MINHA CONTABILIDADE</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
@@ -63,7 +64,7 @@
       <aside class="sidebar" id="sidebar">
         <div class="brand-block">
           <div class="brand-symbol" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div><strong>minha</strong><span>CONTABILIDADE</span></div>
+          <div><strong>MINHA</strong><span>CONTABILIDADE</span></div>
         </div>
         <div class="sidebar-rule"></div>
         <p class="sidebar-label">PAINEL</p>
@@ -188,6 +189,7 @@
             <div class="analysis-grid"><article class="panel panel--wide"><div class="panel-heading"><div><p class="eyebrow">SÉRIE HISTÓRICA</p><h3>Resultado mensal</h3></div></div><div id="analysisBars" class="analysis-bars"></div></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PESO NO MÊS</p><h3>Custos por categoria</h3></div></div><div id="analysisCategories" class="analysis-categories"></div></article></div>
             <article class="panel"><div class="panel-heading"><div><p class="eyebrow">CUSTOS E RECEITAS ESSENCIAIS</p><h3>Transporte, alimentação e salários por mês</h3><p class="panel-subtitle">Transporte reúne lançamentos de transporte, manutenção e combustível. Salários consideram apenas entradas, sem transferências ou investimentos.</p></div></div><div id="analysisEssentialCosts" class="data-table-wrap"></div></article>
             <article class="panel"><div class="panel-heading"><div><p class="eyebrow">APORTES E RESGATES</p><h3>Fluxo mensal de investimentos</h3><p class="panel-subtitle">Separa aplicação e retirada de investimento do resultado operacional do mês.</p></div></div><div id="analysisInvestmentFlow" class="data-table-wrap"></div></article>
+            <article class="panel panel--wide"><div class="panel-heading"><div><p class="eyebrow">MOVIMENTAÇÕES</p><h3>Quantidade de aportes e retiradas</h3><p class="panel-subtitle">No filtro Todos, o gráfico mostra todos os meses que possuem movimentações de investimento.</p></div></div><div class="investment-count-legend"><span><i class="investment-count-dot investment-count-dot--aporte"></i>Aportes</span><span><i class="investment-count-dot investment-count-dot--resgate"></i>Retiradas</span></div><div id="analysisInvestmentCountChart" class="analysis-bars investment-count-chart"></div></article>
             <article class="panel"><div class="panel-heading"><div><p class="eyebrow">ALOCAÇÃO</p><h3>Investimentos por tipo</h3></div></div><div id="analysisInvestments" class="data-table-wrap"></div></article>
             <article class="panel"><div class="panel-heading"><div><p class="eyebrow">COMPOSIÇÃO</p><h3>Bens por categoria</h3></div></div><div id="analysisPatrimony" class="data-table-wrap"></div></article>
             <article class="panel"><div class="panel-heading"><div><p class="eyebrow">COMPARAÇÃO</p><h3>Últimos meses</h3></div></div><div id="analysisTable" class="data-table-wrap"></div></article>
