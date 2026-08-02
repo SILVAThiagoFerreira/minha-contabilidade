@@ -1,0 +1,11 @@
+# Operações privadas (modelo local)
+
+Este modelo existe para orientar a operação sem publicar recursos privados. Copie-o para `OPERATIONS_PRIVATE.md`, que é ignorado pelo Git, e substitua apenas os valores entre sinais de menor e maior fora do repositório.
+
+```text
+FINANCE_SPREADSHEET_URL=<url-privada-da-planilha>
+FINANCE_JSON_REFERENCE_URL=<url-privada-de-referencia-json>
+FINANCE_DRIVE_FOLDER_URL=<url-privada-da-pasta>
+```
+
+Não envie esse arquivo, exports financeiros, IDs de recursos ou credenciais para commits, issues, pull requests, logs ou o GitHub Pages.

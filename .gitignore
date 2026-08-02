@@ -6,5 +6,12 @@ VISUAL/
 .env.*
 !.env.example
 data/
+secrets/
+private/
+exports/
+backups/
+.clasp.json
+appsscript.json
+docs/OPERATIONS_PRIVATE.md
 .DS_Store
 Thumbs.db

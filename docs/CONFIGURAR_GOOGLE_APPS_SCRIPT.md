@@ -17,7 +17,7 @@ Use a planilha online escolhida como fonte oficial e mantenha o acesso dela rest
 
 | Propriedade | Valor |
 | --- | --- |
-| SPREADSHEET_ID | `1F29KEP0--zHP8YtgP_zui3GZUmHP_5NFDQGHWdSwqcI` |
+| SPREADSHEET_ID | `<id-privado-da-planilha>` |
 
 Em Implantar, crie uma implantação como Aplicativo da Web:
 
@@ -70,7 +70,8 @@ Se VaultCurrent precisar ser recuperado, o backend usa a última revisão válid
 - Depois de sair ou recarregar a página, faça login novamente.
 - Uma conta criada em um dispositivo pode ser usada em outro porque o cadastro está na planilha.
 - Em falha de rede ou indisponibilidade do Apps Script, a alteração não é apresentada como salva.
-- Não coloque a URL completa da planilha ou dados financeiros no repositório.
+- Não coloque a URL completa da planilha, IDs de recursos do Drive, dados financeiros ou arquivos JSON privados no repositório.
+- Recursos privados de operação devem ficar somente nas propriedades do Apps Script ou em `docs/OPERATIONS_PRIVATE.md`, que é ignorado pelo Git. Use `docs/OPERATIONS_PRIVATE.md.example` apenas como modelo sem dados reais.
 - O JSON fornecido para referência não é importado nem alterado pelo aplicativo.
 - Em `Configurações`, o usuário pode trocar a senha sem sair da conta; se a senha atual estiver errada, nenhum dado é alterado.
 - Em `Análises`, o botão `Exportar relatório TXT` gera um relatório local para enviar a uma IA. O arquivo inclui dados registrados e cálculos derivados, mas não contém senha, salt, verificador ou `accountId` da autenticação.

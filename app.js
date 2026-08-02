@@ -48,7 +48,9 @@
   const SALARY_CATEGORIES = ["Salário", "Salário Parte 1", "Salário Parte 2", "Salário mensal", "Salário mensal (Carteira de trabalho)"];
   const TRANSPORT_CATEGORIES = ["Transporte", "Transporte - Manutenção", "Transporte - Combustivel"];
   const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => !SALARY_CATEGORIES.includes(category));
-  const CATEGORY_COLORS = ["#b6dcca", "#f3afb5", "#f3c885", "#b9cada", "#c9b9dc", "#a9cdd0", "#f0c3a0", "#d2d89e"];
+  // Paleta dos gráficos: dourado MC, grafite e neutros quentes.
+  // A ordem preserva distinção entre categorias sem introduzir cores fora da identidade.
+  const CATEGORY_COLORS = ["#f3b21a", "#c98a12", "#8f6b2d", "#4a4a4a", "#77736b", "#b7aea0", "#e3c36e", "#9b895b"];
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const encoder = new TextEncoder();

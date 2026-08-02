@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const required = ["index.html", "styles.css", "config.js", "app.js", "README.md", "backend/Code.gs", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md"];
+const required = ["index.html", "styles.css", "config.js", "app.js", "README.md", "CONTRIBUTING.md", "SECURITY.md", "backend/Code.gs", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example"];
 for (const file of required) {
   const stat = await fs.stat(path.join(root, file));
   assert.ok(stat.isFile(), `arquivo ausente: ${file}`);
@@ -16,6 +16,7 @@ const css = await fs.readFile(path.join(root, "styles.css"), "utf8");
 const backend = await fs.readFile(path.join(root, "backend/Code.gs"), "utf8");
 const config = await fs.readFile(path.join(root, "config.js"), "utf8");
 const readme = await fs.readFile(path.join(root, "README.md"), "utf8");
+const publicDocs = await Promise.all(["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example"].map((file) => fs.readFile(path.join(root, file), "utf8")));
 const featureFailures = [];
 
 function assertAny(source, patterns, message) {
@@ -135,7 +136,11 @@ if (workflowFiles.length === 0) {
 }
 
 assert.deepEqual(featureFailures, [], `contratos de transferências/agenda ausentes:\n- ${featureFailures.join("\n- ")}`);
-assert.match(config, /apiUrl:\s*[""][^""]+[""]/i, "o endpoint online precisa estar configurado");
+assert.match(config, /apiUrl:\s*["'][^"']+["']/i, "o endpoint online precisa estar configurado");
+for (const document of publicDocs) {
+  assert.doesNotMatch(document, /docs\.google\.com\/spreadsheets\/d\/|drive\.google\.com\//i, "documentação pública não pode expor links privados do Drive");
+  assert.doesNotMatch(document, /SPREADSHEET_ID\s*\|\s*`[A-Za-z0-9_-]{20,}`/i, "documentação pública não pode expor o ID da planilha");
+}
 assert.doesNotMatch(js, /localStorage|sessionStorage|indexedDB|caches\.|CacheStorage|serviceWorker/i, "o frontend não deve persistir dados no navegador");
 assert.doesNotMatch(js, /fallbackVault|mode:\s*["']local["']|cacheLocalVault|createLocalAccount|loginLocal/i, "o frontend não deve oferecer fallback local");
 assert.doesNotMatch(html, /googleAuth|googleButton|Entrar com Google/i, "o login Google não deve aparecer na interface");
