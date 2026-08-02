@@ -20,7 +20,9 @@
   const MAX_CUSTOM_CATEGORIES = 100;
   const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
   const MAX_PROFILE_PHOTO_CHARS = 26000;
-  const MAX_VAULT_PAYLOAD_CHARS = 45000;
+  // Uma célula do Google Sheets suporta até 50 mil caracteres. Mantemos uma
+  // margem para não rejeitar cofre válidos, inclusive os que tenham avatar.
+  const MAX_VAULT_PAYLOAD_CHARS = 49000;
   const PROFILE_PHOTO_SIZE = 160;
   const CATEGORIES = [
     "Moradia",
@@ -369,7 +371,21 @@
   async function resizeProfilePhoto(file, crop = {}, maximumCharacters = MAX_PROFILE_PHOTO_CHARS) {
     if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type)) throw new Error("Escolha uma imagem JPG, PNG ou WebP.");
     if (file.size > 5 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 5 MB.");
-    const source = await createImageBitmap(file);
+    // createImageBitmap não está disponível em alguns navegadores móveis e
+    // contextos mais restritos. O Image mantém o mesmo resultado no canvas.
+    let source;
+    let sourceUrl = "";
+    if (typeof createImageBitmap === "function") {
+      source = await createImageBitmap(file);
+    } else {
+      sourceUrl = URL.createObjectURL(file);
+      source = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error("Não foi possível ler a foto selecionada."));
+        image.src = sourceUrl;
+      });
+    }
     const zoom = Math.max(1, Math.min(3, Number(crop.zoom) || 1));
     const sourceSide = Math.min(source.width, source.height) / zoom;
     const maxX = Math.max(0, source.width - sourceSide);
@@ -380,10 +396,15 @@
     const y = maxY * Math.max(0, Math.min(1, Number.isFinite(cropY) ? cropY : .5));
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
+    if (!context) {
+      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+      source.close?.();
+      throw new Error("Seu navegador não conseguiu preparar a foto. Tente novamente em outro navegador.");
+    }
     let photo = "";
     // A compactação progressiva evita que uma foto válida falhe apenas por ter
     // muitos detalhes, mantendo sempre o limite aceito pelo backend.
-    for (const size of [PROFILE_PHOTO_SIZE, 144, 128, 112, 96, 80]) {
+    for (const size of [PROFILE_PHOTO_SIZE, 144, 128, 112, 96, 80, 64, 56, 48, 40, 32]) {
       canvas.width = size;
       canvas.height = size;
       for (const quality of [.82, .74, .66, .58]) {
@@ -391,12 +412,14 @@
         context.drawImage(source, x, y, sourceSide, sourceSide, 0, 0, size, size);
         photo = canvas.toDataURL("image/jpeg", quality);
         if (photo.length <= maximumCharacters) {
-          source.close();
+          if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+          source.close?.();
           return photo;
         }
       }
     }
-    source.close();
+    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+    source.close?.();
     throw new Error("Não foi possível compactar essa foto dentro do limite seguro. Escolha outra imagem.");
   }
 
@@ -448,9 +471,19 @@
             const profileWithoutPhoto = { ...vault.profile, avatarDataUrl: "" };
             const payloadWithoutPhoto = JSON.stringify({ ...vault, profile: profileWithoutPhoto });
             const photoBudget = Math.min(MAX_PROFILE_PHOTO_CHARS, MAX_VAULT_PAYLOAD_CHARS - payloadWithoutPhoto.length - 256);
-            if (photoBudget < 900) throw new Error("Não há espaço seguro para uma foto neste cofre. Reduza os dados sincronizados e tente novamente.");
+            if (photoBudget < 512) throw new Error("Não há espaço suficiente para uma foto neste cofre. Reduza os dados sincronizados e tente novamente.");
+            const previousPhoto = vault.profile.avatarDataUrl;
             vault.profile.avatarDataUrl = await resizeProfilePhoto(file, { zoom: dialog.elements.zoom.value, x: dialog.elements.x.value, y: dialog.elements.y.value }, photoBudget);
-            await saveCurrentVault();
+            try {
+              await saveCurrentVault();
+            } catch (error) {
+              // Não mantém uma imagem somente na memória quando a sincronização
+              // falhar; a tela volta a refletir o cofre realmente salvo.
+              vault.profile.avatarDataUrl = previousPhoto;
+              setSidebarAvatar();
+              renderSettings();
+              throw error;
+            }
             setSidebarAvatar();
             renderSettings();
             showToast("Foto do perfil atualizada.");

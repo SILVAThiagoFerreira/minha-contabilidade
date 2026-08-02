@@ -156,11 +156,15 @@ assert.match(js, /openProfilePhotoEditor/, "a foto precisa oferecer ajuste de en
 assert.match(html, /profileEmail/, "as configurações precisam solicitar um e-mail de recuperação");
 assert.match(html, /profileEmailNotice/, "usuários sem e-mail precisam receber uma orientação visível");
 assert.match(js, /resizeProfilePhoto/, "a foto precisa ser reduzida antes da sincronização");
+assert.match(js, /typeof createImageBitmap === "function"/, "o upload de foto precisa ter alternativa para navegadores sem createImageBitmap");
+assert.match(js, /previousPhoto = vault\.profile\.avatarDataUrl/, "o upload precisa preservar a foto anterior quando a sincronização falhar");
+assert.match(js, /MAX_VAULT_PAYLOAD_CHARS = 49000/, "o cliente precisa usar o limite de cofre compatível com fotos compactadas");
 assert.match(js, /pointerdown/, "o enquadramento da foto precisa permitir ajuste direto na grade");
 assert.match(js, /removeProfilePhoto/, "a foto do perfil precisa poder ser removida");
 assert.match(js, /normalizeProfileEmail/, "o e-mail do perfil precisa ser validado no frontend");
 assert.match(backend, /validateProfile_/, "o perfil precisa ser validado no backend");
 assert.match(backend, /MAX_PROFILE_PHOTO_CHARS/, "o backend precisa limitar o tamanho da foto de perfil");
+assert.match(backend, /MAX_PAYLOAD_CHARS = 49000/, "o backend precisa manter o mesmo limite de payload usado pelo cliente");
 assert.match(css, /auth-mark, \.brand-symbol/, "a marca MC precisa compartilhar o estilo do quadrado");
 for (const document of publicDocs) {
   assert.doesNotMatch(document, /docs\.google\.com\/spreadsheets\/d\/|drive\.google\.com\//i, "documentação pública não pode expor links privados do Drive");

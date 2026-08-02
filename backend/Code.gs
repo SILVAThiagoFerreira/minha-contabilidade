@@ -17,7 +17,10 @@ const CURRENT_HEADERS = ["accountId", "username", "revision", "updatedAt", "chec
 const JOURNAL_HEADERS = ["journalId", "accountId", "username", "revision", "updatedAt", "checksum", "payload", "source"];
 const ACCESS_HEADERS = ["accessId", "accountId", "username", "accessedAt", "event"];
 const PASSWORD_RESET_HEADERS = ["resetId", "accountId", "username", "tokenHash", "createdAt", "expiresAt", "usedAt"];
-const MAX_PAYLOAD_CHARS = 45000;
+// O limite por célula do Google Sheets é 50 mil caracteres. Este teto mantém
+// uma margem operacional e permite que cofres extensos continuem aceitando um
+// avatar compactado sem ultrapassar a capacidade da planilha.
+const MAX_PAYLOAD_CHARS = 49000;
 const MAX_ITEMS_PER_COLLECTION = 10000;
 const MAX_CUSTOM_CATEGORIES = 100;
 const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
