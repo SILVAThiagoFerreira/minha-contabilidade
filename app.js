@@ -18,6 +18,8 @@
   const ALL_PERIODS = "todos";
   const MAX_CUSTOM_CATEGORIES = 100;
   const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
+  const MAX_PROFILE_PHOTO_CHARS = 26000;
+  const PROFILE_PHOTO_SIZE = 160;
   const CATEGORIES = [
     "Moradia",
     "Casa",
@@ -59,6 +61,33 @@
   let vault = null;
   let saveQueue = Promise.resolve();
   const tableSort = {};
+
+  // Sem cache de dados financeiros: somente consultamos o manifesto público para
+  // recarregar o código quando uma nova versão for publicada no GitHub Pages.
+  function monitorPublishedRelease() {
+    const currentVersion = String(window.FINANCE_RELEASE?.version || "");
+    if (!currentVersion || !window.fetch) return;
+
+    const check = async () => {
+      try {
+        const response = await fetch(`release.json?ts=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const release = await response.json();
+        if (release?.version && String(release.version) !== currentVersion) {
+          window.location.reload();
+        }
+      } catch (_) {
+        // Uma indisponibilidade temporária de rede não deve interromper o uso.
+      }
+    };
+
+    window.setInterval(check, 120000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) check();
+    });
+  }
+
+  monitorPublishedRelease();
 
   const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "numeric" });
   const shortDateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -163,7 +192,7 @@
   function blankVault(displayName = "") {
     return {
       version: 1,
-      profile: { displayName, currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
+      profile: { displayName, email: "", avatarDataUrl: "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
       accounts: [],
       debts: [],
       transactions: [],
@@ -278,6 +307,8 @@
     normalized.profile = { ...blankVault().profile, ...(value?.profile || {}) };
     normalized.profile.monthlySalary = toAmount(normalized.profile.monthlySalary);
     normalized.profile.averageMonthlySalaryWithOvertime = toAmount(normalized.profile.averageMonthlySalaryWithOvertime);
+    normalized.profile.email = normalizeProfileEmail(normalized.profile.email);
+    normalized.profile.avatarDataUrl = normalizeProfilePhoto(normalized.profile.avatarDataUrl);
     normalized.profile.customCategories = normalizeCustomCategories(normalized.profile.customCategories);
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
     normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
@@ -308,6 +339,43 @@
     normalized.patrimony = Array.isArray(value?.patrimony) ? value.patrimony : [];
     normalized.savings = Array.isArray(value?.savings) ? value.savings : [];
     return normalized;
+  }
+
+  function normalizeProfileEmail(value) {
+    const email = String(value || "").trim().toLowerCase().slice(0, 254);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+  }
+
+  function normalizeProfilePhoto(value) {
+    const photo = String(value || "");
+    return photo.length <= MAX_PROFILE_PHOTO_CHARS && /^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photo) ? photo : "";
+  }
+
+  function setSidebarAvatar() {
+    const avatar = $("#sidebarAvatar");
+    if (!avatar || !vault) return;
+    const displayName = vault.profile.displayName || session?.username || "Usuário";
+    const photo = normalizeProfilePhoto(vault.profile.avatarDataUrl);
+    avatar.textContent = photo ? "" : (displayName.trim().charAt(0).toUpperCase() || "M");
+    avatar.style.backgroundImage = photo ? `url("${photo}")` : "";
+    avatar.classList.toggle("avatar--photo", Boolean(photo));
+  }
+
+  async function resizeProfilePhoto(file) {
+    if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type)) throw new Error("Escolha uma imagem JPG, PNG ou WebP.");
+    if (file.size > 5 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 5 MB.");
+    const source = await createImageBitmap(file);
+    const scale = Math.min(PROFILE_PHOTO_SIZE / source.width, PROFILE_PHOTO_SIZE / source.height, 1);
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").drawImage(source, 0, 0, width, height);
+    source.close();
+    const photo = canvas.toDataURL("image/jpeg", .82);
+    if (photo.length > MAX_PROFILE_PHOTO_CHARS) throw new Error("A imagem ficou maior que o limite seguro. Escolha uma foto mais simples.");
+    return photo;
   }
 
   function syncLegacyCdbs() {
@@ -402,11 +470,12 @@
     $("#appShell").classList.remove("is-hidden");
     const displayName = vault.profile.displayName || session.username || "Usuário";
     $("#sidebarUserName").textContent = displayName;
-    $("#sidebarAvatar").textContent = displayName.trim().charAt(0).toUpperCase() || "M";
+    setSidebarAvatar();
     $("#sidebarUserMode").textContent = "planilha sincronizada";
     $("#syncBadge").innerHTML = '<span class="status-dot status-dot--green"></span>sincronizado';
     setView("dashboard");
     renderAll();
+    if (!vault.profile.email) window.setTimeout(() => showToast("Cadastre seu e-mail em Configurações para preparar a recuperação de acesso.", "error"), 300);
   }
 
   function leaveApp() {
@@ -1199,6 +1268,13 @@
 
   function renderSettings() {
     $("#profileDisplayName").value = vault.profile.displayName || "";
+    $("#profileEmail").value = vault.profile.email || "";
+    $("#profileEmailNotice").classList.toggle("is-hidden", Boolean(vault.profile.email));
+    const preview = $("#profilePhotoPreview");
+    const photo = normalizeProfilePhoto(vault.profile.avatarDataUrl);
+    preview.textContent = photo ? "" : ((vault.profile.displayName || session?.username || "M").trim().charAt(0).toUpperCase() || "M");
+    preview.style.backgroundImage = photo ? `url("${photo}")` : "";
+    preview.classList.toggle("avatar--photo", Boolean(photo));
     setMoneyInputValue($("#profileMonthlySalary"), vault.profile.monthlySalary);
     setMoneyInputValue($("#profileAverageMonthlySalaryWithOvertime"), vault.profile.averageMonthlySalaryWithOvertime);
     renderCustomCategories();
@@ -1813,12 +1889,45 @@
     event.preventDefault();
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
-    vault.profile.displayName = data.displayName.trim();
+    const displayName = data.displayName.trim().slice(0, 80);
+    const email = normalizeProfileEmail(data.email);
+    if (!displayName) { showToast("Informe como quer ser chamado.", "error"); return; }
+    if (data.email && !email) { showToast("Informe um e-mail válido.", "error"); return; }
+    vault.profile.displayName = displayName;
+    vault.profile.email = email;
     vault.profile.monthlySalary = toAmount(data.monthlySalary);
     vault.profile.averageMonthlySalaryWithOvertime = toAmount(data.averageMonthlySalaryWithOvertime);
     await saveCurrentVault();
     enterApp();
     showToast("Perfil atualizado.");
+  }
+
+  async function handleProfilePhotoChange(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    const previousPhoto = vault.profile.avatarDataUrl;
+    try {
+      vault.profile.avatarDataUrl = await resizeProfilePhoto(file);
+      await saveCurrentVault();
+      setSidebarAvatar();
+      renderSettings();
+      showToast("Foto do perfil atualizada.");
+    } catch (error) {
+      vault.profile.avatarDataUrl = previousPhoto;
+      setSidebarAvatar();
+      renderSettings();
+      showToast(error.message || "Não foi possível atualizar a foto.", "error");
+    } finally { input.value = ""; }
+  }
+
+  async function removeProfilePhoto() {
+    if (!vault.profile.avatarDataUrl) return;
+    vault.profile.avatarDataUrl = "";
+    await saveCurrentVault();
+    setSidebarAvatar();
+    renderSettings();
+    showToast("Foto do perfil removida.");
   }
 
   async function clearAllData() {
@@ -1872,6 +1981,7 @@
     $("#savingsForm").addEventListener("submit", handleSavingsSubmit);
     $("#savingsAccount").addEventListener("change", fillSavingsForm);
     $("#profileForm").addEventListener("submit", handleProfileSubmit);
+    $("#profilePhotoInput").addEventListener("change", handleProfilePhotoChange);
     $("#customCategoriesForm").addEventListener("submit", handleCustomCategorySubmit);
     setupMoneyInputs();
     document.addEventListener("click", async (event) => {
@@ -1891,6 +2001,7 @@
       if (action === "open-transaction") { setView("lancamentos"); window.setTimeout(() => $("#transactionFormPanel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); }
       if (action === "export-ai-report") exportAiReport();
       if (action === "clear-all") await clearAllData();
+      if (action === "remove-profile-photo") await removeProfilePhoto();
       if (action === "delete-transaction") await deleteById("transactions", target.dataset.id, "Excluir este lançamento?");
       if (action === "delete-transfer") await deleteTransfer(target.dataset.id);
       if (action === "edit-transaction") editTransaction(target.dataset.id);

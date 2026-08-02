@@ -53,7 +53,7 @@ O relatório também inclui uma seção auxiliar para imposto de renda com os da
 
 ## Configuração
 
-Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar. A visão pública de arquitetura está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), as regras de proteção em [SECURITY.md](SECURITY.md) e o guia de contribuição em [CONTRIBUTING.md](CONTRIBUTING.md). Para referências operacionais privadas, copie `docs/OPERATIONS_PRIVATE.md.example` para o arquivo local ignorado `docs/OPERATIONS_PRIVATE.md` e preencha somente fora do Git.
+Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar. A visão pública de arquitetura está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), as regras de proteção em [SECURITY.md](SECURITY.md) e o guia de contribuição em [CONTRIBUTING.md](CONTRIBUTING.md). Para referências operacionais privadas, copie `docs/OPERATIONS_PRIVATE.md.example` para o arquivo local ignorado `docs/OPERATIONS_PRIVATE.md` e preencha somente fora do Git. O estado e os requisitos da recuperação de acesso estão em [docs/RECUPERACAO_DE_ACESSO.md](docs/RECUPERACAO_DE_ACESSO.md).
 
 ## Investimentos
 
@@ -95,4 +95,4 @@ Contas cadastradas como poupança aparecem em “Contas > Gerenciar rendimento�
 
 ## Publicação
 
-Este checkout não possui arquivos em `.github/workflows`; portanto, não há workflow automático de GitHub Pages configurado no repositório neste momento. Backend, documentação e materiais de referência não devem ser publicados como parte da interface pública. A publicação manual atualiza a branch `gh-pages` somente com `.nojekyll`, `index.html`, `styles.css`, `app.js`, `config.js` e `favicon.svg`; depois, confirme o artefato servido em `https://silvathiagoferreira.github.io/minha-contabilidade/`.
+Este checkout não possui arquivos em `.github/workflows`; portanto, não há workflow automático de GitHub Pages configurado no repositório neste momento. Backend, documentação e materiais de referência não devem ser publicados como parte da interface pública. A publicação manual atualiza a branch `gh-pages` somente com `.nojekyll`, `index.html`, `styles.css`, `app.js`, `config.js`, `favicon.svg` e `release.json`; a versão do manifesto é incrementada para avisar abas abertas sobre a atualização. Depois, confirme o artefato servido em `https://silvathiagoferreira.github.io/minha-contabilidade/`.

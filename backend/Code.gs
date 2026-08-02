@@ -16,6 +16,7 @@ const MAX_PAYLOAD_CHARS = 45000;
 const MAX_ITEMS_PER_COLLECTION = 10000;
 const MAX_CUSTOM_CATEGORIES = 100;
 const MAX_CUSTOM_CATEGORY_NAME_LENGTH = 50;
+const MAX_PROFILE_PHOTO_CHARS = 26000;
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
 
@@ -198,7 +199,7 @@ function login_(identity) {
 function blankVault_(displayName) {
   return {
     version: 1,
-    profile: { displayName: displayName || "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
+    profile: { displayName: displayName || "", email: "", avatarDataUrl: "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
     accounts: [],
     debts: [],
     transactions: [],
@@ -215,6 +216,7 @@ function blankVault_(displayName) {
 
 function jsonPayload_(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Dados do usuário ausentes ou inválidos.");
+  validateProfile_(payload.profile);
   validateCustomCategories_(payload.profile && payload.profile.customCategories);
   ["accounts", "debts", "transactions", "fixedCosts", "transfers", "fixedCostPayments", "cdbs", "investments", "patrimony", "savings"].forEach((name) => {
     if (payload[name] !== undefined && !Array.isArray(payload[name])) throw new Error("Estrutura inválida em " + name + ".");
@@ -228,6 +230,17 @@ function jsonPayload_(payload) {
   const text = JSON.stringify(payload);
   if (text.length > MAX_PAYLOAD_CHARS) throw new Error("O cofre ultrapassou o limite seguro da planilha.");
   return text;
+}
+
+function validateProfile_(profile) {
+  if (profile === undefined) return;
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) throw new Error("Perfil inválido.");
+  const displayName = String(profile.displayName || "").trim();
+  const email = String(profile.email || "").trim();
+  const photo = String(profile.avatarDataUrl || "");
+  if (displayName.length > 80) throw new Error("O nome do perfil pode ter no máximo 80 caracteres.");
+  if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error("O e-mail do perfil é inválido.");
+  if (photo && (photo.length > MAX_PROFILE_PHOTO_CHARS || !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(photo))) throw new Error("A foto do perfil é inválida ou excede o limite seguro.");
 }
 
 function validateCustomCategories_(categories) {

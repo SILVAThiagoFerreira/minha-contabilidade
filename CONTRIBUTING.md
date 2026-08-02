@@ -33,6 +33,12 @@ git diff --cached --check
 
 ## Publicação
 
-O código-fonte fica em `main`. A interface do GitHub Pages é atualizada manualmente na branch `gh-pages` apenas com `.nojekyll`, `index.html`, `styles.css`, `app.js`, `config.js` e `favicon.svg`. Backend, documentação, testes e recursos privados não são parte da publicação estática.
+O código-fonte fica em `main`. A interface do GitHub Pages é atualizada manualmente na branch `gh-pages` apenas com `.nojekyll`, `index.html`, `styles.css`, `app.js`, `config.js`, `favicon.svg` e `release.json`. Backend, documentação, testes e recursos privados não são parte da publicação estática. Aumente a versão de `release.json` em toda publicação para que as abas abertas recebam o código novo automaticamente.
 
 Depois do push, valide HTML, JavaScript e CSS servidos com uma consulta sem cache. Uma alteração em `backend/Code.gs` também exige publicar uma nova versão do Web App no Apps Script; o GitHub Pages não faz essa implantação.
+
+## Conta de apresentação
+
+Mantenha uma conta de apresentação separada, criada diretamente no backend privado e preenchida apenas com valores sintéticos. Em cada evolução que altere tela, cálculos, categorias ou dados exibidos, atualize também esse cofre de demonstração para que a apresentação continue representando a versão atual.
+
+Nunca versione identificador, senha, e-mail, dados pessoais ou valores reais dessa conta. O provisionamento e a redefinição dos dados de demonstração acontecem fora do Git, com as permissões do Apps Script.

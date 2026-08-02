@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const required = ["index.html", "styles.css", "config.js", "app.js", "README.md", "CONTRIBUTING.md", "SECURITY.md", "backend/Code.gs", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example"];
+const required = ["index.html", "styles.css", "config.js", "app.js", "release.json", "README.md", "CONTRIBUTING.md", "SECURITY.md", "backend/Code.gs", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example", "docs/RECUPERACAO_DE_ACESSO.md"];
 for (const file of required) {
   const stat = await fs.stat(path.join(root, file));
   assert.ok(stat.isFile(), `arquivo ausente: ${file}`);
@@ -16,7 +16,8 @@ const css = await fs.readFile(path.join(root, "styles.css"), "utf8");
 const backend = await fs.readFile(path.join(root, "backend/Code.gs"), "utf8");
 const config = await fs.readFile(path.join(root, "config.js"), "utf8");
 const readme = await fs.readFile(path.join(root, "README.md"), "utf8");
-const publicDocs = await Promise.all(["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example"].map((file) => fs.readFile(path.join(root, file), "utf8")));
+const release = JSON.parse(await fs.readFile(path.join(root, "release.json"), "utf8"));
+const publicDocs = await Promise.all(["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example", "docs/RECUPERACAO_DE_ACESSO.md"].map((file) => fs.readFile(path.join(root, file), "utf8")));
 const featureFailures = [];
 
 function assertAny(source, patterns, message) {
@@ -137,6 +138,18 @@ if (workflowFiles.length === 0) {
 
 assert.deepEqual(featureFailures, [], `contratos de transferências/agenda ausentes:\n- ${featureFailures.join("\n- ")}`);
 assert.match(config, /apiUrl:\s*["'][^"']+["']/i, "o endpoint online precisa estar configurado");
+assert.match(String(release.version || ""), /^\d{8}\.\d+$/, "o manifesto de publicação precisa ter uma versão previsível");
+assert.match(html, /release\.json\?ts=/, "o HTML precisa consultar o manifesto de publicação sem cache");
+assert.match(js, /monitorPublishedRelease/, "o frontend precisa detectar uma nova publicação");
+assert.match(html, /profilePhotoInput/, "as configurações precisam permitir selecionar uma foto de perfil");
+assert.match(html, /profileEmail/, "as configurações precisam solicitar um e-mail de recuperação");
+assert.match(html, /profileEmailNotice/, "usuários sem e-mail precisam receber uma orientação visível");
+assert.match(js, /resizeProfilePhoto/, "a foto precisa ser reduzida antes da sincronização");
+assert.match(js, /removeProfilePhoto/, "a foto do perfil precisa poder ser removida");
+assert.match(js, /normalizeProfileEmail/, "o e-mail do perfil precisa ser validado no frontend");
+assert.match(backend, /validateProfile_/, "o perfil precisa ser validado no backend");
+assert.match(backend, /MAX_PROFILE_PHOTO_CHARS/, "o backend precisa limitar o tamanho da foto de perfil");
+assert.match(css, /auth-mark, \.brand-symbol/, "a marca MC precisa compartilhar o estilo do quadrado");
 for (const document of publicDocs) {
   assert.doesNotMatch(document, /docs\.google\.com\/spreadsheets\/d\/|drive\.google\.com\//i, "documentação pública não pode expor links privados do Drive");
   assert.doesNotMatch(document, /SPREADSHEET_ID\s*\|\s*`[A-Za-z0-9_-]{20,}`/i, "documentação pública não pode expor o ID da planilha");
