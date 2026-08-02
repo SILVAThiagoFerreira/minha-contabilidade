@@ -9,9 +9,13 @@ const DEFAULT_CONFIG = {
   spreadsheetId: ""
 };
 
-const USER_HEADERS = ["accountId", "username", "displayName", "salt", "verifier", "createdAt", "updatedAt", "status"];
+// Novas colunas são sempre acrescentadas ao final para preservar planilhas já
+// existentes. `role` é deliberadamente uma autorização de servidor: nunca é
+// aceito do navegador nem armazenado dentro do cofre do usuário.
+const USER_HEADERS = ["accountId", "username", "displayName", "salt", "verifier", "createdAt", "updatedAt", "status", "role"];
 const CURRENT_HEADERS = ["accountId", "username", "revision", "updatedAt", "checksum", "payload"];
 const JOURNAL_HEADERS = ["journalId", "accountId", "username", "revision", "updatedAt", "checksum", "payload", "source"];
+const ACCESS_HEADERS = ["accessId", "accountId", "username", "accessedAt", "event"];
 const MAX_PAYLOAD_CHARS = 45000;
 const MAX_ITEMS_PER_COLLECTION = 10000;
 const MAX_CUSTOM_CATEGORIES = 100;
@@ -30,10 +34,11 @@ function doPost(event) {
     const action = String(body.action || "").trim().toLowerCase();
     if (action === "register") return json_(register_(body));
     const identity = authenticate_(body);
-    if (action === "login") return json_(login_(identity));
+    if (action === "login") { recordAccess_(identity, "login"); return json_(login_(identity)); }
     if (action === "change-password") return json_(changePassword_(identity, body.payload && body.payload.newPassword || body.newPassword));
     if (action === "get") return json_(getVault_(identity));
     if (action === "sync") return json_(saveVault_(identity, body.payload, body.baseRevision));
+    if (action === "admin-dashboard") return json_(adminDashboard_(identity));
     return json_({ ok: false, error: "Ação não reconhecida." }, 400);
   } catch (error) {
     return json_({ ok: false, error: error.message || "Falha no backend." }, 400);
@@ -89,10 +94,16 @@ function sheetWithHeaders_(name, headers) {
   const currentHeaders = lastColumn > 0
     ? sheet.getRange(1, 1, 1, Math.max(lastColumn, headers.length)).getValues()[0].map(String)
     : [];
+  while (currentHeaders.length && !currentHeaders[currentHeaders.length - 1]) currentHeaders.pop();
   if (!currentHeaders.length || currentHeaders.every((value) => !value)) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  } else if (currentHeaders.slice(0, headers.length).join("|") !== headers.join("|")) {
+  } else if (currentHeaders.slice(0, Math.min(currentHeaders.length, headers.length)).join("|") !== headers.slice(0, currentHeaders.length).join("|")) {
     throw new Error("Schema inesperado na aba " + name + ". Nenhum dado foi alterado.");
+  } else if (currentHeaders.length < headers.length) {
+    // Migração compatível: apenas acrescenta campos opcionais, sem deslocar
+    // nem reescrever os registros históricos.
+    sheet.getRange(1, currentHeaders.length + 1, 1, headers.length - currentHeaders.length)
+      .setValues([headers.slice(currentHeaders.length)]);
   }
   return sheet;
 }
@@ -107,6 +118,10 @@ function currentSheet_() {
 
 function journalSheet_() {
   return sheetWithHeaders_("VaultJournal", JOURNAL_HEADERS);
+}
+
+function accessSheet_() {
+  return sheetWithHeaders_("AccessLog", ACCESS_HEADERS);
 }
 
 function bytesToHex_(bytes) {
@@ -136,7 +151,8 @@ function parseUser_(row) {
     verifier: String(row[4] || ""),
     createdAt: row[5],
     updatedAt: row[6],
-    status: String(row[7] || "active").toLowerCase()
+    status: String(row[7] || "active").toLowerCase(),
+    role: String(row[8] || "user").toLowerCase() === "admin" ? "admin" : "user"
   };
 }
 
@@ -157,7 +173,8 @@ function register_(body) {
     if (existing) throw new Error("Esse usuário já existe.");
     const salt = Utilities.getUuid();
     const now = new Date().toISOString();
-    sheet.appendRow([identity.accountId, identity.username, displayName, salt, passwordVerifier_(salt, password), now, now, "active"]);
+    sheet.appendRow([identity.accountId, identity.username, displayName, salt, passwordVerifier_(salt, password), now, now, "active", "user"]);
+    recordAccess_(identity, "register");
     return { ok: true, accountId: identity.accountId, username: identity.username, displayName, revision: 0, payload: null, recovered: false };
   } finally {
     lock.releaseLock();
@@ -171,7 +188,49 @@ function authenticate_(body) {
   if (!match || match.user.status !== "active" || passwordVerifier_(match.user.salt, password) !== match.user.verifier) {
     throw new Error("Usuário ou senha inválidos.");
   }
-  return { ...identity, displayName: match.user.displayName };
+  return { ...identity, displayName: match.user.displayName, role: match.user.role };
+}
+
+function requireAdmin_(identity) {
+  if (identity.role !== "admin") throw new Error("Acesso administrativo não autorizado.");
+}
+
+/**
+ * Provisiona, uma única vez, um administrador definido somente nas Script
+ * Properties. Execute manualmente no editor Apps Script. A senha temporária é
+ * removida da propriedade após o uso e jamais deve constar neste arquivo.
+ *
+ * Propriedades exigidas: ADMIN_USERNAME, ADMIN_PASSWORD.
+ * Opcional: ADMIN_DISPLAY_NAME.
+ */
+function provisionAdminFromScriptProperties() {
+  const properties = PropertiesService.getScriptProperties();
+  const username = String(properties.getProperty("ADMIN_USERNAME") || "").trim().toLowerCase();
+  const password = validatePassword_(properties.getProperty("ADMIN_PASSWORD"));
+  const displayName = displayName_(properties.getProperty("ADMIN_DISPLAY_NAME"), username);
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) throw new Error("ADMIN_USERNAME inválido.");
+  const identity = { username, accountId: checksum_(username) };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sheet = usersSheet_();
+    const found = userRows_(sheet).map((row, index) => ({ user: parseUser_(row), rowNumber: index + 2 }))
+      .find((item) => item.user.username === username || item.user.accountId === identity.accountId);
+    const salt = Utilities.getUuid();
+    const now = new Date().toISOString();
+    const verifier = passwordVerifier_(salt, password);
+    if (found) {
+      // O provisionamento é explícito e atualiza somente a conta escolhida.
+      sheet.getRange(found.rowNumber, 3, 1, 7)
+        .setValues([[displayName, salt, verifier, found.user.createdAt || now, now, "active", "admin"]]);
+    } else {
+      sheet.appendRow([identity.accountId, username, displayName, salt, verifier, now, now, "active", "admin"]);
+    }
+    properties.deleteProperty("ADMIN_PASSWORD");
+    return { ok: true, username, role: "admin", provisionedAt: now };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function changePassword_(identity, newPasswordValue) {
@@ -193,7 +252,94 @@ function changePassword_(identity, newPasswordValue) {
 
 function login_(identity) {
   const vault = getVault_(identity);
-  return { ...vault, displayName: identity.displayName };
+  return { ...vault, displayName: identity.displayName, role: identity.role };
+}
+
+function recordAccess_(identity, eventName) {
+  accessSheet_().appendRow([Utilities.getUuid(), identity.accountId, identity.username, new Date().toISOString(), String(eventName || "login")]);
+}
+
+function accessRows_() {
+  const sheet = accessSheet_();
+  const lastRow = sheet.getLastRow();
+  return lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, ACCESS_HEADERS.length).getValues();
+}
+
+function adminDashboard_(identity) {
+  requireAdmin_(identity);
+  const users = userRows_(usersSheet_()).map(parseUser_);
+  const current = currentRows_(currentSheet_()).map((row) => parseRow_(row, "current")).filter(Boolean);
+  const journalRows = journalSheet_().getLastRow();
+  const accessRows = accessRows_();
+  const now = new Date();
+  const currentMonth = Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM");
+  const visitsByMonth = Object.create(null);
+  const lastLoginByAccount = Object.create(null);
+  accessRows.forEach((row) => {
+    const accessedAt = String(row[3] || "");
+    const month = accessedAt.slice(0, 7);
+    if (month) visitsByMonth[month] = (visitsByMonth[month] || 0) + 1;
+    const accountId = String(row[1] || "");
+    if (accountId && (!lastLoginByAccount[accountId] || accessedAt > lastLoginByAccount[accountId])) lastLoginByAccount[accountId] = accessedAt;
+  });
+  const metrics = {
+    generatedAt: new Date().toISOString(),
+    totalUsers: users.length,
+    activeUsers: users.filter((user) => user.status === "active").length,
+    inactiveUsers: users.filter((user) => user.status !== "active").length,
+    administrators: users.filter((user) => user.role === "admin").length,
+    vaultsWithData: current.length,
+    totalRevisions: Math.max(0, journalRows - 1),
+    transactionRecords: 0,
+    accountRecords: 0,
+    investmentRecords: 0,
+    latestVaultUpdateAt: null
+  };
+  current.forEach((vault) => {
+    const payload = vault.payload || {};
+    metrics.transactionRecords += Array.isArray(payload.transactions) ? payload.transactions.length : 0;
+    metrics.accountRecords += Array.isArray(payload.accounts) ? payload.accounts.length : 0;
+    metrics.investmentRecords += Array.isArray(payload.investments) ? payload.investments.length : 0;
+    const updatedAt = String(vault.updatedAt || "");
+    if (updatedAt && (!metrics.latestVaultUpdateAt || updatedAt > metrics.latestVaultUpdateAt)) metrics.latestVaultUpdateAt = updatedAt;
+  });
+  const safeUsers = users
+    .map((user) => ({
+      username: user.username,
+      displayName: user.displayName,
+      status: user.status,
+      role: user.role,
+      createdAt: user.createdAt || null,
+      updatedAt: user.updatedAt || null,
+      lastLoginAt: lastLoginByAccount[user.accountId] || null
+    }))
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
+    .slice(0, 500);
+  const months = [];
+  for (let offset = 11; offset >= 0; offset--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const key = Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyy-MM");
+    months.push({ label: Utilities.formatDate(date, Session.getScriptTimeZone(), "MM/yy"), visits: visitsByMonth[key] || 0 });
+  }
+  const dashboard = {
+    generatedAt: metrics.generatedAt,
+    summary: {
+      visits: accessRows.length,
+      users: metrics.totalUsers,
+      activeUsers: metrics.activeUsers,
+      newUsers: users.filter((user) => String(user.createdAt || "").slice(0, 7) === currentMonth).length
+    },
+    activity: months,
+    users: safeUsers.map((user) => ({ username: user.username, createdAt: user.createdAt, lastLoginAt: user.lastLoginAt, active: user.status === "active" })),
+    system: [
+      { label: "Cofres sincronizados", status: "ok", detail: String(metrics.vaultsWithData) },
+      { label: "Revisões preservadas", status: "ok", detail: String(metrics.totalRevisions) },
+      { label: "Lançamentos registrados", status: "ok", detail: String(metrics.transactionRecords) },
+      { label: "Contas cadastradas", status: "ok", detail: String(metrics.accountRecords) },
+      { label: "Investimentos cadastrados", status: "ok", detail: String(metrics.investmentRecords) }
+    ]
+  };
+  return { ok: true, dashboard };
 }
 
 function blankVault_(displayName) {

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const required = ["index.html", "styles.css", "config.js", "app.js", "release.json", "README.md", "CONTRIBUTING.md", "SECURITY.md", "backend/Code.gs", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example", "docs/RECUPERACAO_DE_ACESSO.md"];
+const required = ["index.html", "styles.css", "config.js", "app.js", "release.json", "README.md", "CONTRIBUTING.md", "SECURITY.md", "backend/Code.gs", "docs/ARCHITECTURE.md", "docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md", "docs/OPERATIONS_PRIVATE.md.example", "docs/RECUPERACAO_DE_ACESSO.md", "docs/ADMINISTRACAO.md"];
 for (const file of required) {
   const stat = await fs.stat(path.join(root, file));
   assert.ok(stat.isFile(), `arquivo ausente: ${file}`);
@@ -24,7 +24,7 @@ function assertAny(source, patterns, message) {
   if (!patterns.some((pattern) => pattern.test(source))) featureFailures.push(message);
 }
 
-for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "dividas", "fixos", "cdb", "investimentos", "patrimonio", "analises", "configuracoes", "dashboardWealthMetrics", "analysisInvestments", "analysisPatrimony", "analysisInvestmentFlow", "analysisEssentialCosts", "patrimonyForm", "passwordForm", "profileMonthlySalary", "profileAverageMonthlySalaryWithOvertime", "export-ai-report"]) assert.match(html, new RegExp(marker), `seção ausente: ${marker}`);
+for (const marker of ["authScreen", "dashboard", "lancamentos", "contas", "dividas", "fixos", "cdb", "investimentos", "patrimonio", "analises", "configuracoes", "administracao", "adminNavItem", "adminMetrics", "adminUsersTable", "adminSystemTable", "dashboardWealthMetrics", "analysisInvestments", "analysisPatrimony", "analysisInvestmentFlow", "analysisEssentialCosts", "patrimonyForm", "passwordForm", "profileMonthlySalary", "profileAverageMonthlySalaryWithOvertime", "export-ai-report"]) assert.match(html, new RegExp(marker), `seção ausente: ${marker}`);
 for (const marker of ["cdbAccount", "investmentType", "benchmarkRate", "cancel-form", "debtForm", "debtAccount", "debtMetrics", "debtTable", "savingsForm", "savingsAccount", "savingsSummary", "manualYield", "monthlyRate", "investmentOperationDialog", "investmentOperationForm", "investmentOperationAccount"]) assert.match(html, new RegExp(marker), `campo ausente: ${marker}`);
 for (const marker of ["saveCurrentVault", "normalizeVault", "renderAnalyses", "renderInvestments", "renderPatrimony", "renderDebts", "handleDebtSubmit", "handlePatrimonySubmit", "editDebt", "editPatrimony", "totalDebt", "totalPatrimony", "remoteAccountId", "AbortController", "baseRevision", "openRemoteAccount", "changeRemotePassword", "handlePasswordSubmit", "backend online ainda está desatualizado", "buildAiReport", "exportAiReport", "reportMonthKeys", "operationalTransactions", "investmentTransactions", "investmentOperationType", "investmentFlowForPeriod", "investmentTransactionsForPeriod", "netInvestment", "investmentRate", "register", "login", "savings", "debts", "investments", "patrimony", "accountId", "handleSavingsSubmit", "investmentProjection", "benchmarkRate", "totalInvested", "totalInvestmentValue", "investmentYield", "investmentCurrentValue", "investmentHasHistory", "handleInvestmentOperationSubmit", "open-investment-operation", "operations", "investmentOperationId", "investmentOperationAccount", "balanceAfter", "editInvestment", "editFixed", "monthlyRate", "manualYield", "monthlySalary", "averageMonthlySalaryWithOvertime", "deleteAccount", "deleteInvestment", "accountReportLabel", "conta que ainda está vinculada"]) assert.match(js, new RegExp(marker), `regra ausente: ${marker}`);
 assert.match(js, /minimumFractionDigits:\s*2/, "a moeda precisa sempre exibir duas casas decimais");
@@ -37,7 +37,7 @@ assert.match(js, /#investmentOperationAmount/, "a operação de investimento pre
 assert.doesNotMatch(js, /R\$ .*mil|R\$ .* mi/, "a exibição não deve abreviar valores em mil ou milhões");
 assert.match(html, /R\$ 4\.820,00/, "os valores demonstrativos também precisam ter duas casas");
 for (const marker of ["debts", "investments", "patrimony", "validateDebts_", "validatePatrimony_", "validateInvestmentOperations_", "investmentByOperation", "transactionCount", "operations"]) assert.match(backend, new RegExp(marker), `coleção ausente no backend: ${marker}`);
-for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "changePassword_", "change-password", "passwordVerifier_", "SPREADSHEET_ID", "accountId", "VaultJournal", "LockService", "checksum_", "savings"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
+for (const marker of ["identity_", "USER_HEADERS", "register_", "authenticate_", "changePassword_", "change-password", "passwordVerifier_", "SPREADSHEET_ID", "accountId", "VaultJournal", "LockService", "checksum_", "savings", "admin-dashboard", "adminDashboard_", "requireAdmin_", "provisionAdminFromScriptProperties", "ADMIN_PASSWORD", "AccessLog", "recordAccess_", "accessRows_"]) assert.match(backend, new RegExp(marker), `backend incompleto: ${marker}`);
 
 // Transferências são uma operação pareada: a conta de origem recebe a saída,
 // a conta de destino recebe a entrada e o restante do sistema pode identificá-las.
@@ -141,6 +141,10 @@ assert.match(config, /apiUrl:\s*["'][^"']+["']/i, "o endpoint online precisa est
 assert.match(String(release.version || ""), /^\d{8}\.\d+$/, "o manifesto de publicação precisa ter uma versão previsível");
 assert.match(html, /release\.json\?ts=/, "o HTML precisa consultar o manifesto de publicação sem cache");
 assert.match(js, /monitorPublishedRelease/, "o frontend precisa detectar uma nova publicação");
+assert.match(js, /admin-dashboard/, "o painel administrativo precisa consultar indicadores pelo backend");
+assert.match(js, /session\?\.role !== "admin"/, "o painel administrativo precisa ser protegido por papel de sessão");
+assert.match(js, /function refreshAdminDashboard/, "o painel administrativo precisa atualizar os indicadores");
+assert.match(html, /Nenhum lançamento, saldo ou dado financeiro individual/, "o painel administrativo não deve exibir dados financeiros individuais");
 assert.match(html, /profilePhotoInput/, "as configurações precisam permitir selecionar uma foto de perfil");
 assert.match(html, /profileEmail/, "as configurações precisam solicitar um e-mail de recuperação");
 assert.match(html, /profileEmailNotice/, "usuários sem e-mail precisam receber uma orientação visível");
@@ -164,6 +168,7 @@ assert.doesNotMatch(js, /backupWarning|snapshots? automáticos?|snapshot[^\n]*(?
 assert.doesNotMatch(js, /prefixPositions|PARTICIPAÇÃO EM CDB/i, "as análises não devem ficar limitadas ao CDB prefixado");
 assert.doesNotMatch(html, /Enaex|enaex/i, "a marca de referência não deve aparecer na interface");
 assert.doesNotMatch(js, /password\s*[:=]\s*["'][^"']+["']/i, "não deve haver senha fixa no código");
+assert.doesNotMatch(backend, /ADMIN_PASSWORD\s*[:=]\s*["'][^"']+["']/i, "a senha administrativa não pode ser fixa no backend");
 assert.match(js, /text\/plain;charset=utf-8/, "o relatório precisa ser exportado como TXT UTF-8");
 for (const marker of ["RESUMO EXECUTIVO", "PADRÕES E INSIGHTS DERIVADOS", "EVOLUÇÃO MENSAL", "FLUXO MENSAL DE INVESTIMENTOS", "DIAGNÓSTICO DA VIDA FINANCEIRA", "relação_aportes_vs_resgates", "resgates_sobre_aportes", "aporte_liquido", "LANÇAMENTOS DETALHADOS", "DADOS BRUTOS EM JSON", "PERGUNTAS PARA A IA INVESTIGAR", "INFORMAÇÕES PARA IMPOSTO DE RENDA - DADOS DECLARADOS"]) assert.match(js, new RegExp(marker), `seção ausente no relatório IA: ${marker}`);
 for (const marker of ["identificação curta", "dívida | credor | saldo atual declarado | parcela mensal declarada", "conta/banco vinculado", "saldo_atual_declarado", "parcela_mensal_declarada", "conta_banco_vinculado", "Movimentações de investimentos", "saldo_após", "soma das parcelas; não é saldo", "PARCELA MENSAL"]) assert.match(js, new RegExp(marker), `campo fiscal/clareza ausente: ${marker}`);

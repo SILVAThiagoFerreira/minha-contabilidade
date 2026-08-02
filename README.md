@@ -53,7 +53,7 @@ O relatório também inclui uma seção auxiliar para imposto de renda com os da
 
 ## Configuração
 
-Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar. A visão pública de arquitetura está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), as regras de proteção em [SECURITY.md](SECURITY.md) e o guia de contribuição em [CONTRIBUTING.md](CONTRIBUTING.md). Para referências operacionais privadas, copie `docs/OPERATIONS_PRIVATE.md.example` para o arquivo local ignorado `docs/OPERATIONS_PRIVATE.md` e preencha somente fora do Git. O estado e os requisitos da recuperação de acesso estão em [docs/RECUPERACAO_DE_ACESSO.md](docs/RECUPERACAO_DE_ACESSO.md).
+Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar. A visão pública de arquitetura está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), as regras de proteção em [SECURITY.md](SECURITY.md) e o guia de contribuição em [CONTRIBUTING.md](CONTRIBUTING.md). Para referências operacionais privadas, copie `docs/OPERATIONS_PRIVATE.md.example` para o arquivo local ignorado `docs/OPERATIONS_PRIVATE.md` e preencha somente fora do Git. O estado e os requisitos da recuperação de acesso estão em [docs/RECUPERACAO_DE_ACESSO.md](docs/RECUPERACAO_DE_ACESSO.md). O provisionamento privado e as métricas do painel administrativo estão em [docs/ADMINISTRACAO.md](docs/ADMINISTRACAO.md).
 
 ## Investimentos
 
