@@ -56,6 +56,7 @@
   let session = null;
   let vault = null;
   let saveQueue = Promise.resolve();
+  const tableSort = {};
 
   const monthFormatter = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "numeric" });
   const shortDateFormatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -179,6 +180,62 @@
     const value = String(category || "").trim();
     if (value === "Salário mensal") return "Salário mensal (Carteira de trabalho)";
     return !value || value.toLowerCase() === "outros" ? UNAVAILABLE_CATEGORY : value;
+  }
+
+  function tableSortHeader(table, key, label, options = {}) {
+    const current = tableSort[table];
+    const active = current?.key === key;
+    const direction = active ? current.direction : "none";
+    const nextDirection = active && current.direction === "asc" ? "desc" : "asc";
+    const ariaSort = active ? (current.direction === "asc" ? "ascending" : "descending") : "none";
+    const alignment = options.align === "right" ? " table-sort-header--right" : "";
+    return `<th aria-sort="${ariaSort}" class="table-sort-column${alignment}"><button class="table-sort-button" type="button" data-action="sort-table" data-table="${escapeHtml(table)}" data-sort-key="${escapeHtml(key)}" data-sort-direction="${nextDirection}" aria-label="Ordenar por ${escapeHtml(label)}${active ? `, ordem ${current.direction === "asc" ? "crescente" : "decrescente"}` : ""}">${escapeHtml(label)}<span class="table-sort-indicator" aria-hidden="true">${active ? (current.direction === "asc" ? "↑" : "↓") : "↕"}</span></button></th>`;
+  }
+
+  function sortTableRows(table, items, comparators, fallback) {
+    const sort = tableSort[table];
+    const compare = sort && comparators[sort.key];
+    if (!compare) return items.slice().sort(fallback);
+    const multiplier = sort.direction === "desc" ? -1 : 1;
+    return items.slice().sort((a, b) => multiplier * compare(a, b));
+  }
+
+  function compareText(left, right) {
+    return String(left ?? "").localeCompare(String(right ?? ""), "pt-BR", { sensitivity: "base", numeric: true });
+  }
+
+  function enhanceSortableTables() {
+    $$(".data-table:not(.data-table--transactions)").forEach((table, tableIndex) => {
+      table.dataset.sortableTable = String(tableIndex);
+      $$("thead th", table).forEach((heading, columnIndex) => {
+        if (!heading.textContent.trim() || $("button", heading)) return;
+        const label = heading.textContent.trim();
+        heading.innerHTML = `<button class="table-sort-button" type="button" data-action="sort-dom-table" data-table-index="${tableIndex}" data-column-index="${columnIndex}" data-sort-direction="asc" aria-label="Ordenar por ${escapeHtml(label)}">${escapeHtml(label)}<span class="table-sort-indicator" aria-hidden="true">↕</span></button>`;
+      });
+    });
+  }
+
+  function sortRenderedTable(tableIndex, columnIndex, direction) {
+    const table = $$(".data-table:not(.data-table--transactions)")[Number(tableIndex)];
+    const body = $("tbody", table);
+    if (!body) return;
+    const multiplier = direction === "desc" ? -1 : 1;
+    const rows = $$("tr", body).sort((a, b) => {
+      const valueA = a.cells[columnIndex]?.textContent.trim() || "";
+      const valueB = b.cells[columnIndex]?.textContent.trim() || "";
+      const moneyA = Number(valueA.replace(/[^0-9,-]/g, "").replace(".", "").replace(",", "."));
+      const moneyB = Number(valueB.replace(/[^0-9,-]/g, "").replace(".", "").replace(",", "."));
+      const dateA = /^\d{2}\/\d{2}\/\d{4}$/.test(valueA) ? Date.parse(valueA.split("/").reverse().join("-")) : NaN;
+      const dateB = /^\d{2}\/\d{2}\/\d{4}$/.test(valueB) ? Date.parse(valueB.split("/").reverse().join("-")) : NaN;
+      const result = Number.isFinite(dateA) && Number.isFinite(dateB) ? dateA - dateB : Number.isFinite(moneyA) && Number.isFinite(moneyB) && /[R$%]|^-?\d+[.,]\d{2}$/.test(valueA + valueB) ? moneyA - moneyB : compareText(valueA, valueB);
+      return multiplier * result;
+    });
+    rows.forEach((row) => body.append(row));
+    $$(".table-sort-button", table).forEach((button) => {
+      const selected = Number(button.dataset.columnIndex) === Number(columnIndex);
+      button.dataset.sortDirection = selected ? (direction === "asc" ? "desc" : "asc") : "asc";
+      $(".table-sort-indicator", button).textContent = selected ? (direction === "asc" ? "↑" : "↓") : "↕";
+    });
   }
 
   function categoryNameKey(name) {
@@ -564,6 +621,11 @@
     return `<article class="metric-card ${className}"><p class="metric-label">${escapeHtml(label)}</p><div class="metric-value">${escapeHtml(value)}</div><p class="metric-meta">${escapeHtml(meta)}</p></article>`;
   }
 
+  function interactiveChartBar(className, height, label) {
+    const safeLabel = escapeHtml(label);
+    return `<div class="${className} chart-bar-interactive" style="height:${height}%" tabindex="0" role="img" aria-label="${safeLabel}"><span class="chart-tooltip" role="tooltip">${safeLabel}</span></div>`;
+  }
+
   function renderDashboard() {
     const period = currentPeriod();
     const periodTransactions = transactionsForPeriod(period);
@@ -605,7 +667,7 @@
       return { period, income: sumTransactions(items, "entrada"), expense: sumTransactions(items, "saida") };
     });
     const max = Math.max(...values.flatMap((item) => [item.income, item.expense]), 1);
-    $("#cashflowChart").innerHTML = values.map((item) => `<div class="cash-bar-group"><div class="cash-bar cash-bar--income" style="height:${Math.max(3, (item.income / max) * 100)}%" title="Entradas ${formatCurrency(item.income)}"></div><div class="cash-bar cash-bar--expense" style="height:${Math.max(3, (item.expense / max) * 100)}%" title="Saídas ${formatCurrency(item.expense)}"></div><span class="cash-month">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("");
+    $("#cashflowChart").innerHTML = values.map((item) => `<div class="cash-bar-group">${interactiveChartBar("cash-bar cash-bar--income", Math.max(3, item.income / max * 100), `Entradas em ${monthLabel(item.period)}: ${formatCurrency(item.income)}`)}${interactiveChartBar("cash-bar cash-bar--expense", Math.max(3, item.expense / max * 100), `Saídas em ${monthLabel(item.period)}: ${formatCurrency(item.expense)}`)}<span class="cash-month">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("");
   }
 
   function renderCategories(items) {
@@ -635,20 +697,26 @@
   function renderTransactions() {
     const period = currentPeriod();
     const filter = $("#transactionFilter").value;
-    const items = transactionsForPeriod(period).filter((item) => filter === "todos" || item.type === filter).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
+    const items = sortTableRows("transactions", transactionsForPeriod(period).filter((item) => filter === "todos" || item.type === filter), {
+      date: (a, b) => compareText(a.date, b.date),
+      description: (a, b) => compareText(a.description, b.description),
+      category: (a, b) => compareText(a.category, b.category),
+      account: (a, b) => compareText(accountNames[a.accountId], accountNames[b.accountId]),
+      amount: (a, b) => toAmount(a.amount) - toAmount(b.amount)
+    }, (a, b) => String(b.date).localeCompare(String(a.date)));
     const income = sumTransactions(items, "entrada");
     const expense = sumTransactions(items, "saida");
     $("#transactionMetrics").innerHTML = [
       `<article class="transaction-metric transaction-metric--income"><span class="eyebrow">ENTRADAS</span><strong>${formatShortCurrency(income)}</strong><small>${items.filter((item) => item.type === "entrada").length} lançamento(ões) no período</small></article>`,
       `<article class="transaction-metric transaction-metric--expense"><span class="eyebrow">SAÍDAS</span><strong>${formatShortCurrency(expense)}</strong><small>${items.filter((item) => item.type === "saida").length} lançamento(ões) no período</small></article>`
     ].join("");
-    const accountNames = Object.fromEntries(vault.accounts.map((account) => [account.id, account.name]));
-    $("#transactionTable").innerHTML = items.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>CONTA</th><th>VALOR</th><th></th></tr></thead><tbody>${items.map((item) => {
+    $("#transactionTable").innerHTML = items.length ? `<table class="data-table data-table--transactions"><thead><tr>${tableSortHeader("transactions", "date", "DATA")}${tableSortHeader("transactions", "description", "DESCRIÇÃO")}${tableSortHeader("transactions", "category", "CATEGORIA")}${tableSortHeader("transactions", "account", "CONTA")}${tableSortHeader("transactions", "amount", "VALOR", { align: "right" })}<th><span class="sr-only">Ações</span></th></tr></thead><tbody>${items.map((item) => {
       const transfer = item.transferId ? transferById(item.transferId) : null;
       const transferLabel = transfer ? `<span class="status-pill status-pill--blue" title="Movimentação interna entre contas">TRANSFERÊNCIA · ${item.transferRole === "origem" ? "SAÍDA" : "ENTRADA"}</span>` : "";
       const actions = item.investmentOperationId ? `<span class="status-pill status-pill--muted" title="Movimentação controlada pela carteira de investimentos">INVESTIMENTO</span>` : item.transferId ? transferLabel : `<span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span>`;
       const description = transfer ? `${escapeHtml(transfer.description || "Transferência entre contas")}<br><small class="muted-cell">${item.transferRole === "origem" ? `para ${escapeHtml(accountNames[transfer.destinationAccountId] || "outra conta")}` : `de ${escapeHtml(accountNames[transfer.sourceAccountId] || "outra conta")}`}</small>` : `<strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}`;
-      return `<tr><td>${formatDate(item.date)}</td><td>${description}</td><td>${transfer ? transferLabel : escapeHtml(item.category)}</td><td>${escapeHtml(accountNames[item.accountId] || "—")}</td><td class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td>${actions}</td></tr>`;
+      return `<tr><td data-label="Data">${formatDate(item.date)}</td><td data-label="Descrição">${description}</td><td data-label="Categoria">${transfer ? transferLabel : escapeHtml(item.category)}</td><td data-label="Conta">${escapeHtml(accountNames[item.accountId] || "—")}</td><td data-label="Valor" class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td data-label="Ações">${actions}</td></tr>`;
     }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${periodLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
   }
 
@@ -820,10 +888,10 @@
       `<article class="insight-card"><p class="eyebrow">PATRIMÔNIO LÍQUIDO</p><h3>${formatShortCurrency(netWorth)}</h3><p>contas + investimentos + bens − ${formatShortCurrency(debt)} em dívidas.</p></article>`
     ].join("");
     const max = Math.max(...months.flatMap((item) => [Math.abs(item.income), Math.abs(item.expense)]), 1);
-    $("#analysisBars").innerHTML = months.map((item) => `<div class="analysis-bar-group"><div class="analysis-bar analysis-bar--positive" style="height:${Math.max(3, item.income / max * 100)}%" title="Entradas ${formatCurrency(item.income)}"></div><div class="analysis-bar analysis-bar--negative" style="height:${Math.max(3, item.expense / max * 100)}%" title="Saídas ${formatCurrency(item.expense)}"></div><span class="analysis-bar-label">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("");
+    $("#analysisBars").innerHTML = months.map((item) => `<div class="analysis-bar-group">${interactiveChartBar("analysis-bar analysis-bar--positive", Math.max(3, item.income / max * 100), `Entradas em ${monthLabel(item.period)}: ${formatCurrency(item.income)}`)}${interactiveChartBar("analysis-bar analysis-bar--negative", Math.max(3, item.expense / max * 100), `Saídas em ${monthLabel(item.period)}: ${formatCurrency(item.expense)}`)}<span class="analysis-bar-label">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("");
     const investmentMonths = months.filter((item) => item.count);
     const investmentCountMax = Math.max(...investmentMonths.flatMap((item) => [item.aporteCount, item.resgateCount]), 1);
-    $("#analysisInvestmentCountChart").innerHTML = investmentMonths.length ? investmentMonths.map((item) => `<div class="analysis-bar-group"><div class="analysis-bar investment-count-bar--aporte" style="height:${Math.max(3, item.aporteCount / investmentCountMax * 100)}%" title="${item.aporteCount} aporte(s) em ${monthLabel(item.period)}"></div><div class="analysis-bar investment-count-bar--resgate" style="height:${Math.max(3, item.resgateCount / investmentCountMax * 100)}%" title="${item.resgateCount} retirada(s) em ${monthLabel(item.period)}"></div><span class="analysis-bar-label">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("") : `<div class="empty-state"><strong>Sem movimentações de investimento no período.</strong><span>Os aportes e retiradas aparecerão aqui quando forem registrados.</span></div>`;
+    $("#analysisInvestmentCountChart").innerHTML = investmentMonths.length ? investmentMonths.map((item) => `<div class="analysis-bar-group">${interactiveChartBar("analysis-bar investment-count-bar--aporte", Math.max(3, item.aporteCount / investmentCountMax * 100), `${item.aporteCount} aporte(s) em ${monthLabel(item.period)}`)}${interactiveChartBar("analysis-bar investment-count-bar--resgate", Math.max(3, item.resgateCount / investmentCountMax * 100), `${item.resgateCount} retirada(s) em ${monthLabel(item.period)}`)}<span class="analysis-bar-label">${monthLabel(item.period).slice(0, 3)}</span></div>`).join("") : `<div class="empty-state"><strong>Sem movimentações de investimento no período.</strong><span>Os aportes e retiradas aparecerão aqui quando forem registrados.</span></div>`;
     const totalExpense = expenseItems.reduce((sum, item) => sum + toAmount(item.amount), 0);
     const categories = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
     $("#analysisCategories").innerHTML = categories.length ? categories.map(([category, amount]) => `<div class="analysis-category"><span>${escapeHtml(category)}</span><div class="analysis-track"><span style="width:${totalExpense ? amount / totalExpense * 100 : 0}%"></span></div><strong>${formatShortCurrency(amount)}</strong></div>`).join("") : `<div class="empty-state"><strong>Sem categorias ainda.</strong><span>Os pesos aparecerão com seus lançamentos.</span></div>`;
@@ -1238,6 +1306,7 @@
     renderPatrimony();
     renderAnalyses();
     renderSettings();
+    enhanceSortableTables();
   }
 
   function clearForm(form) {
@@ -1808,6 +1877,15 @@
       if (!target) return;
       if (target.dataset.viewTarget || target.dataset.viewLink) { setView(target.dataset.viewTarget || target.dataset.viewLink); return; }
       const action = target.dataset.action;
+      if (action === "sort-table") {
+        tableSort[target.dataset.table] = { key: target.dataset.sortKey, direction: target.dataset.sortDirection === "desc" ? "desc" : "asc" };
+        renderAll();
+        return;
+      }
+      if (action === "sort-dom-table") {
+        sortRenderedTable(target.dataset.tableIndex, target.dataset.columnIndex, target.dataset.sortDirection);
+        return;
+      }
       if (action === "open-transaction") { setView("lancamentos"); window.setTimeout(() => $("#transactionFormPanel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30); }
       if (action === "export-ai-report") exportAiReport();
       if (action === "clear-all") await clearAllData();

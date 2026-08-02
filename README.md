@@ -23,6 +23,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - projeção bruta de investimentos prefixados e de CDB DI pós-fixado com CDI-base informado;
 - análises mensais, categorias, composição patrimonial, taxa de sobra e consolidação de transporte, alimentação e salários recebidos;
 - filtro de período com opção Todos e gráfico da quantidade mensal de aportes e retiradas de investimentos;
+- gráficos com detalhes ao passar o mouse ou navegar pelo teclado e tabelas ordenáveis pelos cabeçalhos;
 - relatório financeiro avançado em TXT UTF-8, com salários declarados para referência, dados brutos, métricas, campos auxiliares para imposto de renda, padrões, alertas e perguntas prontas para uma IA;
 - workflow de GitHub Pages.
 
@@ -65,6 +66,8 @@ Na aba `Análises`, os blocos de aporte do mês, resgate do mês e aporte x resg
 O painel `Transporte, alimentação e salários por mês` reúne os últimos seis meses. Transporte soma as saídas em `Transporte`, `Transporte - Manutenção` e `Transporte - Combustivel`; alimentação soma as saídas de `Alimentação`; e salários recebidos somam somente entradas em `Salário`, `Salário Parte 1`, `Salário Parte 2` e na categoria salarial legada. Transferências internas e operações de investimento não entram nesses totais. As categorias antigas continuam preservadas como foram registradas.
 
 O seletor global de período também oferece `Todos`. Nessa opção, lançamentos, totais e análises consideram todo o histórico disponível. A agenda de custos fixos continua mensal e mostra a competência atual até que um mês específico seja selecionado. Em `Análises`, o gráfico `Quantidade de aportes e retiradas` mostra as operações por mês; com `Todos`, ele reúne todos os meses que têm operações de investimento.
+
+As barras dos gráficos mostram um detalhe ao passar o mouse ou receber foco pelo teclado. Nas tabelas, clique no nome de uma coluna para ordenar seus registros. Em telas menores, `Seus movimentos` vira uma lista de cartões com os mesmos dados e ações, sem rolagem horizontal.
 
 ## Dívidas
 

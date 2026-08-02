@@ -154,7 +154,7 @@ h1, h2, h3, strong { font-family: var(--display); }
 .link-button:hover { text-decoration: underline; }
 .cashflow-chart { display: flex; align-items: flex-end; justify-content: space-between; gap: 13px; height: 190px; padding: 15px 0 0; border-bottom: 1px solid var(--line); }
 .cash-bar-group { display: flex; flex: 1; align-items: flex-end; justify-content: center; gap: 5px; height: 100%; }
-.cash-bar { width: min(24px, 42%); min-height: 3px; transition: height .35s ease; }
+.cash-bar { width: min(24px, 42%); min-height: 3px; transition: height .35s ease, transform .16s ease, box-shadow .16s ease; }
 .cash-bar--income { background: #79c4ab; }
 .cash-bar--expense { background: #f18d98; }
 .cash-month { position: absolute; transform: translateY(214px); color: var(--muted); font-size: 10px; }
@@ -213,6 +213,13 @@ h1, h2, h3, strong { font-family: var(--display); }
 .data-table th:first-child, .data-table td:first-child { padding-left: 0; }
 .data-table th:last-child, .data-table td:last-child { padding-right: 0; text-align: right; }
 .data-table .number { font-family: var(--display); font-weight: 700; text-align: right; }
+.table-sort-button { display: inline-flex; align-items: center; gap: 5px; min-height: 25px; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; text-align: inherit; cursor: pointer; }
+.table-sort-button:hover, .table-sort-button:focus-visible { color: var(--red); outline: none; }
+.table-sort-button:focus-visible { box-shadow: 0 0 0 2px rgba(196, 63, 78, .25); }
+.table-sort-header--right { text-align: right !important; }
+.table-sort-header--right .table-sort-button { justify-content: flex-end; }
+.table-sort-indicator { color: var(--red); font-size: 12px; letter-spacing: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .type-label { display: inline-flex; align-items: center; gap: 6px; }
 .type-label::before { width: 6px; height: 6px; content: ""; background: var(--red); }
 .type-label--income::before { background: var(--green); }
@@ -292,7 +299,12 @@ h1, h2, h3, strong { font-family: var(--display); }
 .insight-card p { margin-top: 5px; color: var(--muted); font-size: 11px; }
 .analysis-bars { display: flex; align-items: flex-end; gap: 14px; height: 244px; padding: 10px 3px 26px; border-bottom: 1px solid var(--line); }
 .analysis-bar-group { position: relative; display: flex; flex: 1; align-items: flex-end; justify-content: center; gap: 4px; height: 100%; }
-.analysis-bar { width: min(31px, 42%); min-height: 3px; }
+.analysis-bar { width: min(31px, 42%); min-height: 3px; transition: transform .16s ease, box-shadow .16s ease; }
+.chart-bar-interactive { position: relative; cursor: help; }
+.chart-bar-interactive:hover, .chart-bar-interactive:focus-visible { z-index: 2; transform: scaleX(1.16) scaleY(1.035); box-shadow: 0 0 0 2px rgba(30, 47, 56, .16); outline: 0; }
+.chart-tooltip { position: absolute; left: 50%; bottom: calc(100% + 9px); z-index: 5; width: max-content; max-width: min(240px, 70vw); padding: 7px 9px; color: #fff; background: #1e2f38; box-shadow: 0 4px 14px rgba(30, 47, 56, .2); font-size: 11px; line-height: 1.35; opacity: 0; pointer-events: none; transform: translate(-50%, 4px); transition: opacity .15s ease, transform .15s ease; visibility: hidden; }
+.chart-tooltip::after { position: absolute; bottom: -5px; left: 50%; width: 9px; height: 9px; background: #1e2f38; content: ""; transform: translateX(-50%) rotate(45deg); }
+.chart-bar-interactive:hover .chart-tooltip, .chart-bar-interactive:focus-visible .chart-tooltip { opacity: 1; transform: translate(-50%, 0); visibility: visible; }
 .analysis-bar--positive { background: #76bca5; }
 .analysis-bar--negative { background: #ed8a96; }
 .investment-count-legend { display: flex; gap: 16px; margin: -4px 0 9px; color: var(--muted); font-size: 10px; }
@@ -393,6 +405,16 @@ h1, h2, h3, strong { font-family: var(--display); }
   .savings-row-values span { text-align: left; }
   .data-table { min-width: 555px; }
   .panel--table .data-table-wrap { margin-right: -16px; padding-right: 16px; }
+  .data-table--transactions { min-width: 0; }
+  .panel--table .data-table-wrap:has(.data-table--transactions) { margin-right: 0; padding-right: 0; overflow-x: visible; }
+  .data-table--transactions thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .data-table--transactions, .data-table--transactions tbody, .data-table--transactions tr, .data-table--transactions td { display: block; width: 100%; }
+  .data-table--transactions tr { padding: 11px 0; border-top: 1px solid var(--line); }
+  .data-table--transactions td { display: grid; grid-template-columns: minmax(88px, .72fr) minmax(0, 1.28fr); gap: 9px; padding: 5px 0; border: 0; white-space: normal; text-align: right; }
+  .data-table--transactions td::before { content: attr(data-label); color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .09em; text-align: left; }
+  .data-table--transactions td:first-child, .data-table--transactions td:last-child { padding-right: 0; padding-left: 0; text-align: right; }
+  .data-table--transactions td:last-child { min-height: 32px; }
+  .data-table--transactions .table-actions { justify-self: end; opacity: 1; }
   .analysis-grid { gap: 9px; }
   .analysis-bars { gap: 5px; height: 210px; }
   .analysis-bar { width: min(22px, 38%); }

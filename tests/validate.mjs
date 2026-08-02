@@ -12,6 +12,7 @@ for (const file of required) {
 
 const html = await fs.readFile(path.join(root, "index.html"), "utf8");
 const js = await fs.readFile(path.join(root, "app.js"), "utf8");
+const css = await fs.readFile(path.join(root, "styles.css"), "utf8");
 const backend = await fs.readFile(path.join(root, "backend/Code.gs"), "utf8");
 const config = await fs.readFile(path.join(root, "config.js"), "utf8");
 const readme = await fs.readFile(path.join(root, "README.md"), "utf8");
@@ -78,8 +79,18 @@ assert.match(js, /function trendPeriods/, "as análises precisam montar a série
 assert.match(js, /aporteCount/, "as análises precisam contar aportes");
 assert.match(js, /resgateCount/, "as análises precisam contar retiradas");
 assert.match(html, /analysisInvestmentCountChart/, "as análises precisam exibir gráfico de quantidade de movimentações de investimento");
+assert.match(js, /interactiveChartBar/, "as barras dos gráficos precisam oferecer interação acessível");
+assert.match(js, /tabindex="0"/, "as barras dos gráficos precisam poder receber foco pelo teclado");
+assert.match(css, /chart-tooltip/, "os gráficos precisam exibir tooltip ao interagir com uma barra");
+assert.match(js, /function tableSortHeader/, "a tabela de lançamentos precisa permitir ordenar por coluna");
+assert.match(js, /function enhanceSortableTables/, "as demais tabelas precisam ter ordenação por cabeçalho");
+assert.match(js, /sort-dom-table/, "a ordenação das tabelas precisa responder ao clique no cabeçalho");
+assert.match(css, /data-table--transactions/, "a tabela de lançamentos precisa ter uma apresentação responsiva própria");
 assert.match(html, /<title>MINHA CONTABILIDADE<\/title>/, "o título da aba precisa usar MINHA CONTABILIDADE");
 assert.match(html, /favicon\.svg/, "a aba precisa usar o ícone do aplicativo");
+assert.match(js, /function tableSortHeader/, "as tabelas precisam expor cabeçalhos ordenáveis");
+assert.match(js, /function enhanceSortableTables/, "as tabelas de dados precisam receber ordenação clicável");
+assert.match(js, /data-table--transactions/, "a tabela Seus movimentos precisa ter tratamento responsivo próprio");
 assert.match(js, /!item\.transferId && !item\.investmentOperationId/, "a análise por grupos deve excluir transferências e investimentos");
 assert.match(js, /categoryGroupTotalForPeriod\(period, SALARY_CATEGORIES, "entrada"\)/, "salários recebidos devem considerar apenas entradas");
 assert.ok(js.includes('const FIXED_COST_CATEGORIES = CATEGORIES.filter((category) => !SALARY_CATEGORIES.includes(category));'), "categorias de salário devem ficar fora dos custos fixos");
