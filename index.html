@@ -4,15 +4,45 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#111111" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <meta name="description" content="Painel pessoal para organizar caixa, contas, patrimônio, custos fixos e investimentos." />
     <title>MINHA CONTABILIDADE</title>
-    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link id="appFavicon" rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css" />
-    <script src="config.js" defer></script>
-    <script src="app.js" defer></script>
+    <link id="appStylesheet" rel="stylesheet" href="styles.css" />
+    <script>
+      // O HTML pode ficar em cache no CDN. Este bootstrap sempre busca o manifesto
+      // atual sem cache e carrega os assets da versão publicada mais recente.
+      (() => {
+        const fallbackRelease = "20260802";
+        const appendVersion = (path, version) => `${path}?v=${encodeURIComponent(version)}`;
+        const loadScript = (src) => new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.defer = true;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.append(script);
+        });
+        const start = (release) => {
+          const version = String(release?.version || fallbackRelease);
+          window.FINANCE_RELEASE = Object.freeze({ version });
+          document.getElementById("appStylesheet").href = appendVersion("styles.css", version);
+          document.getElementById("appFavicon").href = appendVersion("favicon.svg", version);
+          loadScript(appendVersion("config.js", version))
+            .then(() => loadScript(appendVersion("app.js", version)))
+            .catch(() => loadScript(appendVersion("app.js", `${version}-${Date.now()}`)));
+        };
+        fetch(`release.json?ts=${Date.now()}`, { cache: "no-store" })
+          .then((response) => response.ok ? response.json() : Promise.reject(new Error("release indisponível")))
+          .then(start)
+          .catch(() => start({ version: `${fallbackRelease}-${Date.now()}` }));
+      })();
+    </script>
   </head>
   <body>
     <div id="toastRegion" class="toast-region" aria-live="polite"></div>
@@ -203,7 +233,7 @@
 
           <section class="view" data-view="configuracoes">
             <div class="view-intro"><div><p class="eyebrow">CONTROLE E PRIVACIDADE</p><h1>Configurações</h1><p class="view-lede">Escolha como guardar seus dados e mantenha uma cópia quando quiser.</p></div></div>
-            <div class="settings-grid"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PERFIL</p><h3>Seu cadastro</h3></div></div><form id="profileForm" class="stack-form"><label class="field"><span>Como quer ser chamado?</span><input name="displayName" id="profileDisplayName" required /></label><label class="field"><span>Salário mensal (Carteira de trabalho)</span><input name="monthlySalary" id="profileMonthlySalary" type="number" min="0" step="0.01" placeholder="0,00" /></label><label class="field"><span>Salário Mensal Médio + Horas Extras <small>(análises)</small></span><input name="averageMonthlySalaryWithOvertime" id="profileAverageMonthlySalaryWithOvertime" type="number" min="0" step="0.01" placeholder="0,00" /></label><label class="field"><span>Moeda</span><select name="currency"><option value="BRL">Real brasileiro (R$)</option></select></label><button class="button button--secondary" type="submit">Salvar perfil</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ACESSO</p><h3>Trocar senha</h3></div></div><p class="settings-copy">A senha atual é conferida no servidor. A nova senha substitui a anterior na planilha e nunca fica salva no navegador.</p><form id="passwordForm" class="stack-form"><label class="field"><span>Senha atual</span><input name="currentPassword" type="password" autocomplete="current-password" minlength="8" required /></label><label class="field"><span>Nova senha</span><input name="newPassword" type="password" autocomplete="new-password" minlength="8" placeholder="mínimo de 8 caracteres" required /></label><label class="field"><span>Confirme a nova senha</span><input name="newPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label><button class="button button--secondary" type="submit">Atualizar senha</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">HISTÓRICO ONLINE</p><h3>Revisões permanentes</h3></div></div><p class="settings-copy">Cada gravação é mantida na planilha e no histórico de revisões, sem depender de arquivos locais ou cópias paralelas.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span>Fonte oficial: planilha online.</span></div><button class="danger-link" type="button" data-action="clear-all">Apagar todos os dados deste usuário</button></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ARMAZENAMENTO</p><h3 id="storageTitle">Planilha sincronizada</h3></div><span class="status-pill status-pill--green" id="storagePill">ONLINE</span></div><p id="storageDescription" class="settings-copy">Os lançamentos são gravados online e recebem uma revisão permanente no histórico da planilha.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span id="storageDetail">A planilha online é a fonte oficial dos seus dados.</span></div></article></div>
+            <div class="settings-grid"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">PERFIL</p><h3>Seu cadastro</h3></div></div><form id="profileForm" class="stack-form"><div class="profile-photo-control"><span class="profile-photo-preview avatar" id="profilePhotoPreview">M</span><div><strong>Foto do perfil</strong><p>JPG, PNG ou WebP. A imagem é reduzida antes de ser sincronizada.</p><div class="profile-photo-actions"><label class="button button--secondary" for="profilePhotoInput">Escolher foto</label><button class="button button--ghost" type="button" data-action="remove-profile-photo">Remover</button></div><input id="profilePhotoInput" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" /></div></div><label class="field"><span>Como quer ser chamado?</span><input name="displayName" id="profileDisplayName" maxlength="80" required /></label><label class="field"><span>E-mail para recuperação</span><input name="email" id="profileEmail" type="email" autocomplete="email" maxlength="254" placeholder="voce@exemplo.com" /></label><p id="profileEmailNotice" class="form-hint">Cadastre um e-mail para que a recuperação de acesso possa ser habilitada quando o serviço de e-mail estiver configurado.</p><label class="field"><span>Salário mensal (Carteira de trabalho)</span><input name="monthlySalary" id="profileMonthlySalary" type="number" min="0" step="0.01" placeholder="0,00" /></label><label class="field"><span>Salário Mensal Médio + Horas Extras <small>(análises)</small></span><input name="averageMonthlySalaryWithOvertime" id="profileAverageMonthlySalaryWithOvertime" type="number" min="0" step="0.01" placeholder="0,00" /></label><label class="field"><span>Moeda</span><select name="currency"><option value="BRL">Real brasileiro (R$)</option></select></label><button class="button button--secondary" type="submit">Salvar perfil</button></form></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ACESSO</p><h3>Trocar senha</h3></div></div><p class="settings-copy">A senha atual é conferida no servidor. A nova senha substitui a anterior na planilha e nunca fica salva no navegador.</p><form id="passwordForm" class="stack-form"><label class="field"><span>Senha atual</span><input name="currentPassword" type="password" autocomplete="current-password" minlength="8" required /></label><label class="field"><span>Nova senha</span><input name="newPassword" type="password" autocomplete="new-password" minlength="8" placeholder="mínimo de 8 caracteres" required /></label><label class="field"><span>Confirme a nova senha</span><input name="newPasswordConfirm" type="password" autocomplete="new-password" minlength="8" required /></label><button class="button button--secondary" type="submit">Atualizar senha</button></form><p class="form-hint">Ainda não há recuperação por e-mail: ela exige um serviço de envio e token temporário no backend. Cadastre seu e-mail no perfil para ficar pronto quando esse recurso for ativado.</p></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">HISTÓRICO ONLINE</p><h3>Revisões permanentes</h3></div></div><p class="settings-copy">Cada gravação é mantida na planilha e no histórico de revisões, sem depender de arquivos locais ou cópias paralelas.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span>Fonte oficial: planilha online.</span></div><button class="danger-link" type="button" data-action="clear-all">Apagar todos os dados deste usuário</button></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">ARMAZENAMENTO</p><h3 id="storageTitle">Planilha sincronizada</h3></div><span class="status-pill status-pill--green" id="storagePill">ONLINE</span></div><p id="storageDescription" class="settings-copy">Os lançamentos são gravados online e recebem uma revisão permanente no histórico da planilha.</p><div class="connection-row"><span class="status-dot status-dot--green"></span><span id="storageDetail">A planilha online é a fonte oficial dos seus dados.</span></div></article></div>
             <article class="panel custom-categories-panel"><div class="panel-heading"><div><p class="eyebrow">CATEGORIAS</p><h3>Suas categorias</h3></div></div><p class="settings-copy">Crie categorias que façam sentido para sua rotina. As categorias originais continuam disponíveis e não podem ser alteradas.</p><form id="customCategoriesForm" class="category-create-form"><label class="field"><span>Nova categoria</span><input id="customCategoryName" name="name" maxlength="50" placeholder="ex.: Cursos e capacitação" required /></label><button class="button button--primary" type="submit">Adicionar</button></form><div id="customCategoriesList" class="custom-categories-list" aria-live="polite"></div></article>
           </section>
         </main>
