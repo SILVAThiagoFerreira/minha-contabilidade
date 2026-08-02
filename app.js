@@ -363,21 +363,60 @@
     avatar.classList.toggle("avatar--photo", Boolean(photo));
   }
 
-  async function resizeProfilePhoto(file) {
+  async function resizeProfilePhoto(file, crop = {}) {
     if (!file || !/^image\/(jpeg|png|webp)$/i.test(file.type)) throw new Error("Escolha uma imagem JPG, PNG ou WebP.");
     if (file.size > 5 * 1024 * 1024) throw new Error("A imagem deve ter no máximo 5 MB.");
     const source = await createImageBitmap(file);
-    const scale = Math.min(PROFILE_PHOTO_SIZE / source.width, PROFILE_PHOTO_SIZE / source.height, 1);
-    const width = Math.max(1, Math.round(source.width * scale));
-    const height = Math.max(1, Math.round(source.height * scale));
+    const zoom = Math.max(1, Math.min(3, Number(crop.zoom) || 1));
+    const sourceSide = Math.min(source.width, source.height) / zoom;
+    const maxX = Math.max(0, source.width - sourceSide);
+    const maxY = Math.max(0, source.height - sourceSide);
+    const x = maxX * Math.max(0, Math.min(1, (Number(crop.x) || 0.5)));
+    const y = maxY * Math.max(0, Math.min(1, (Number(crop.y) || 0.5)));
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext("2d").drawImage(source, 0, 0, width, height);
+    canvas.width = PROFILE_PHOTO_SIZE;
+    canvas.height = PROFILE_PHOTO_SIZE;
+    canvas.getContext("2d").drawImage(source, x, y, sourceSide, sourceSide, 0, 0, PROFILE_PHOTO_SIZE, PROFILE_PHOTO_SIZE);
     source.close();
     const photo = canvas.toDataURL("image/jpeg", .82);
     if (photo.length > MAX_PROFILE_PHOTO_CHARS) throw new Error("A imagem ficou maior que o limite seguro. Escolha uma foto mais simples.");
     return photo;
+  }
+
+  function openProfilePhotoEditor(file) {
+    const reader = new FileReader();
+    reader.onerror = () => showToast("Não foi possível abrir a foto selecionada.", "error");
+    reader.onload = () => {
+      const dialog = document.createElement("dialog");
+      dialog.className = "photo-editor-dialog";
+      dialog.innerHTML = `<form method="dialog" class="photo-editor"><div><p class="eyebrow">FOTO DO PERFIL</p><h3>Ajuste o enquadramento</h3><p class="settings-copy">Use os controles para definir a área que aparecerá no seu perfil.</p></div><div class="photo-editor-preview" aria-label="Prévia da foto"></div><label class="field"><span>Zoom</span><input name="zoom" type="range" min="1" max="3" step="0.01" value="1" /></label><label class="field"><span>Posição horizontal</span><input name="x" type="range" min="0" max="1" step="0.01" value="0.5" /></label><label class="field"><span>Posição vertical</span><input name="y" type="range" min="0" max="1" step="0.01" value="0.5" /></label><div class="profile-photo-actions"><button class="button button--secondary" value="cancel">Cancelar</button><button class="button button--primary" value="apply">Aplicar foto</button></div></form>`;
+      document.body.appendChild(dialog);
+      const preview = dialog.querySelector(".photo-editor-preview");
+      const updatePreview = () => {
+        const zoom = Number(dialog.elements.zoom.value);
+        const x = Number(dialog.elements.x.value);
+        const y = Number(dialog.elements.y.value);
+        preview.style.backgroundImage = `url("${reader.result}")`;
+        preview.style.backgroundSize = `${zoom * 100}%`;
+        preview.style.backgroundPosition = `${x * 100}% ${y * 100}%`;
+      };
+      [dialog.elements.zoom, dialog.elements.x, dialog.elements.y].forEach((control) => control.addEventListener("input", updatePreview));
+      updatePreview();
+      dialog.addEventListener("close", async () => {
+        try {
+          if (dialog.returnValue === "apply") {
+            vault.profile.avatarDataUrl = await resizeProfilePhoto(file, { zoom: dialog.elements.zoom.value, x: dialog.elements.x.value, y: dialog.elements.y.value });
+            await saveCurrentVault();
+            setSidebarAvatar();
+            renderSettings();
+            showToast("Foto do perfil atualizada.");
+          }
+        } catch (error) { showToast(error.message || "Não foi possível atualizar a foto.", "error"); }
+        finally { dialog.remove(); }
+      }, { once: true });
+      dialog.showModal();
+    };
+    reader.readAsDataURL(file);
   }
 
   function syncLegacyCdbs() {
@@ -458,10 +497,10 @@
   function setAuthMode(mode) {
     authMode = mode;
     const signup = mode === "signup";
-    $("#authTitle").textContent = signup ? "Criar conta online" : "Entrar no painel";
-    $("#authSubtitle").textContent = signup ? "Seu cadastro e seus dados ficam na planilha online." : "Acompanhe seu dinheiro sem planilhas espalhadas.";
+    $("#authTitle").textContent = signup ? "Criar conta" : "Entrar no painel";
+    $("#authSubtitle").textContent = signup ? "Crie seu acesso e mantenha seus dados sincronizados com segurança." : "Acompanhe seu dinheiro com clareza.";
     $("#authSubmit").textContent = signup ? "Criar conta" : "Entrar";
-    $("#authModeToggle").textContent = signup ? "Já tenho uma conta" : "Criar uma conta online";
+    $("#authModeToggle").textContent = signup ? "Já tenho uma conta" : "Criar uma conta";
     $("#confirmPasswordField").classList.toggle("is-hidden", !signup);
     $("#authPassword").setAttribute("autocomplete", signup ? "new-password" : "current-password");
     setAuthNotice("");
@@ -473,7 +512,7 @@
     const displayName = vault.profile.displayName || session.username || "Usuário";
     $("#sidebarUserName").textContent = displayName;
     setSidebarAvatar();
-    $("#sidebarUserMode").textContent = session.role === "admin" ? "administrador" : "planilha sincronizada";
+    $("#sidebarUserMode").textContent = session.role === "admin" ? "administrador" : "dados sincronizados";
     $("#adminNavItem").classList.toggle("is-hidden", session.role !== "admin");
     $("#syncBadge").innerHTML = '<span class="status-dot status-dot--green"></span>sincronizado';
     setView("dashboard");
@@ -1285,10 +1324,10 @@
     setMoneyInputValue($("#profileMonthlySalary"), vault.profile.monthlySalary);
     setMoneyInputValue($("#profileAverageMonthlySalaryWithOvertime"), vault.profile.averageMonthlySalaryWithOvertime);
     renderCustomCategories();
-    $("#storageTitle").textContent = "Planilha sincronizada";
+    $("#storageTitle").textContent = "Dados protegidos";
     $("#storagePill").textContent = "ONLINE";
-    $("#storageDescription").textContent = "Os lançamentos são gravados na planilha e recebem uma revisão permanente no histórico online.";
-    $("#storageDetail").textContent = "A planilha online é a fonte oficial dos seus dados.";
+    $("#storageDescription").textContent = "Seus lançamentos são sincronizados com segurança e recebem revisões permanentes.";
+    $("#storageDetail").textContent = "Histórico protegido e disponível durante sua sessão.";
   }
 
   function adminMetric(label, value, detail = "") {
@@ -1541,11 +1580,11 @@
         const opened = await openRemoteAccount(data.username, data.password, data.username, true);
         setAuthNotice("Conta criada.", true);
         enterApp();
-        showToast("Conta criada e sincronizada na planilha.");
+        showToast("Conta criada e sincronizada com segurança.");
       } else {
         const opened = await openRemoteAccount(data.username, data.password, data.username, false);
         enterApp();
-        if (opened.recovered) showToast("Dados recuperados do histórico da planilha.");
+        if (opened.recovered) showToast("Dados recuperados do histórico protegido.");
       }
     } catch (error) {
       setAuthNotice(error.message || "Não foi possível concluir.");
@@ -1968,17 +2007,10 @@
     const input = event.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
-    const previousPhoto = vault.profile.avatarDataUrl;
     try {
-      vault.profile.avatarDataUrl = await resizeProfilePhoto(file);
-      await saveCurrentVault();
-      setSidebarAvatar();
-      renderSettings();
-      showToast("Foto do perfil atualizada.");
+      if (!/^image\/(jpeg|png|webp)$/i.test(file.type) || file.size > 5 * 1024 * 1024) throw new Error("Escolha uma imagem JPG, PNG ou WebP de até 5 MB.");
+      openProfilePhotoEditor(file);
     } catch (error) {
-      vault.profile.avatarDataUrl = previousPhoto;
-      setSidebarAvatar();
-      renderSettings();
       showToast(error.message || "Não foi possível atualizar a foto.", "error");
     } finally { input.value = ""; }
   }
