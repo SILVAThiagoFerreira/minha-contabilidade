@@ -324,8 +324,8 @@ h1, h2, h3, strong { font-family: var(--display); }
 .insight-card .eyebrow { color: var(--muted); }
 .insight-card h3 { margin-top: 11px; font-size: 18px; letter-spacing: -.035em; }
 .insight-card p { margin-top: 5px; color: var(--muted); font-size: 11px; }
-.analysis-bars { display: flex; align-items: flex-end; gap: 14px; height: 244px; min-width: 0; padding: 10px 3px 26px; overflow: hidden; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), rgba(17,17,17,.065) calc(25% - 1px), rgba(17,17,17,.065) 25%); }
-.analysis-bar-group { position: relative; display: flex; flex: 1; align-items: flex-end; justify-content: center; gap: 4px; height: 100%; }
+.analysis-bars { display: flex; align-items: flex-end; gap: 14px; height: 244px; min-width: 0; padding: 10px 3px 26px; overflow-x: auto; overflow-y: visible; overscroll-behavior-x: contain; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), rgba(17,17,17,.065) calc(25% - 1px), rgba(17,17,17,.065) 25%); }
+.analysis-bar-group { position: relative; display: flex; flex: 1 0 64px; align-items: flex-end; justify-content: center; gap: 4px; height: 100%; }
 .analysis-bar { width: min(31px, 42%); min-height: 3px; transition: transform .16s ease, box-shadow .16s ease; }
 .chart-bar-interactive { position: relative; cursor: help; }
 .chart-bar-interactive:hover, .chart-bar-interactive:focus-visible { z-index: 2; transform: scaleX(1.16) scaleY(1.035); box-shadow: 0 0 0 2px rgba(243,178,26,.5); outline: 0; }
@@ -524,6 +524,7 @@ h1, h2, h3, strong { font-family: var(--display); }
   .operation-summary { align-items: flex-start; flex-direction: column; gap: 5px; }
   .analysis-grid { gap: 9px; }
   .analysis-bars { gap: 5px; height: 210px; }
+  .analysis-bar-group { flex-basis: 46px; }
   .analysis-bar { width: min(22px, 38%); }
   .invoice-trend-chart { gap: 5px; min-height: 220px; padding-right: 2px; padding-left: 2px; }
   .invoice-trend-column { height: 190px; }
