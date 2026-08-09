@@ -246,6 +246,15 @@ h1, h2, h3, strong { font-family: var(--display); }
 .table-action { min-width: 40px; min-height: 40px; padding: 5px 7px; border: 1px solid transparent; color: var(--muted); background: transparent; font-size: 14px; }
 .table-action:hover, .table-action:focus-visible { border-color: var(--line); color: var(--red); background: #fff7f8; }
 .table-action:hover { color: var(--red); }
+.cards-table, .card-payments-table { table-layout: auto; }
+.cards-table th, .card-payments-table th { overflow-wrap: normal; white-space: nowrap; }
+.cards-table th:first-child { min-width: 84px; }
+.cards-table th:nth-child(3) { min-width: 88px; }
+.cards-table th:nth-child(4) { min-width: 112px; }
+.card-payments-table th:nth-child(3) { min-width: 114px; }
+.card-payments-table th:nth-child(5) { min-width: 94px; }
+.card-payments-table th:nth-child(6) { min-width: 142px; }
+.card-payments-table .status-pill { white-space: nowrap; }
 .investment-table { min-width: 0; }
 .investment-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
 .investment-action { min-height: 40px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); background: var(--white); font-size: 10px; font-weight: 700; overflow-wrap: normal; white-space: nowrap; }
