@@ -466,6 +466,8 @@ function blankVault_(displayName) {
     version: 1,
     profile: { displayName: displayName || "", email: "", avatarDataUrl: "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
     accounts: [],
+    cards: [],
+    cardPayments: [],
     debts: [],
     transactions: [],
     fixedCosts: [],
@@ -483,12 +485,13 @@ function jsonPayload_(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Dados do usuário ausentes ou inválidos.");
   validateProfile_(payload.profile);
   validateCustomCategories_(payload.profile && payload.profile.customCategories);
-  ["accounts", "debts", "transactions", "fixedCosts", "transfers", "fixedCostPayments", "cdbs", "investments", "patrimony", "savings"].forEach((name) => {
+  ["accounts", "cards", "cardPayments", "debts", "transactions", "fixedCosts", "transfers", "fixedCostPayments", "cdbs", "investments", "patrimony", "savings"].forEach((name) => {
     if (payload[name] !== undefined && !Array.isArray(payload[name])) throw new Error("Estrutura inválida em " + name + ".");
     if (Array.isArray(payload[name]) && payload[name].length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de registros excedida em " + name + ".");
   });
   validateInvestmentOperations_(payload.investments || [], payload.transactions || []);
   validateTransfers_(payload.transfers || [], payload.transactions || [], payload.accounts || []);
+  validateCards_(payload.cards || [], payload.cardPayments || [], payload.transactions || [], payload.accounts || []);
   validateFixedCostPayments_(payload.fixedCostPayments || [], payload.fixedCosts || []);
   validateDebts_(payload.debts || [], payload.accounts || []);
   validatePatrimony_(payload.patrimony || []);
@@ -548,6 +551,76 @@ function validateDebts_(debts, accounts) {
     if (accountId && Object.keys(accountIds).length && !accountIds[accountId]) throw new Error("A dívida referencia uma conta inexistente.");
     if (debt.active !== undefined && typeof debt.active !== "boolean") throw new Error("O status ativo da dívida deve ser booleano.");
     debtIds[id] = true;
+  });
+}
+
+/**
+ * Cartões são um cadastro vinculado a uma conta existente. Cada fatura paga
+ * mantém seu próprio registro e precisa ter exatamente um lançamento de saída
+ * correspondente na mesma conta, com a mesma data e valor.
+ */
+function validateCards_(cards, cardPayments, transactions, accounts) {
+  const accountIds = Object.create(null);
+  const cardById = Object.create(null);
+  const paymentById = Object.create(null);
+  const transactionById = Object.create(null);
+  const transactionByPayment = Object.create(null);
+
+  (accounts || []).forEach((account) => {
+    if (account && typeof account === "object" && String(account.id || "").trim()) accountIds[String(account.id).trim()] = true;
+  });
+
+  (cards || []).forEach((card) => {
+    if (!card || typeof card !== "object" || Array.isArray(card)) throw new Error("Cartão inválido.");
+    const id = String(card.id || "").trim();
+    const name = String(card.name || "").trim();
+    const type = String(card.type || "").trim().toLowerCase();
+    const accountId = String(card.accountId || "").trim();
+    if (!id || cardById[id]) throw new Error("Cada cartão precisa ter um ID único.");
+    if (!name || name.length > 100) throw new Error("Cada cartão precisa ter um nome de até 100 caracteres.");
+    if (["credito", "debito"].indexOf(type) === -1) throw new Error("O tipo do cartão deve ser crédito ou débito.");
+    if (!accountId || !accountIds[accountId]) throw new Error("O cartão precisa estar vinculado a uma conta existente.");
+    if (card.active !== undefined && typeof card.active !== "boolean") throw new Error("O status ativo do cartão deve ser booleano.");
+    cardById[id] = { id, type, accountId };
+  });
+
+  (cardPayments || []).forEach((payment) => {
+    if (!payment || typeof payment !== "object" || Array.isArray(payment)) throw new Error("Fatura paga de cartão inválida.");
+    const id = String(payment.id || "").trim();
+    const cardId = String(payment.cardId || "").trim();
+    const accountId = String(payment.accountId || "").trim();
+    const transactionId = String(payment.transactionId || "").trim();
+    const date = String(payment.date || "").trim();
+    const amount = Number(payment.amount);
+    const card = cardById[cardId];
+    if (!id || paymentById[id]) throw new Error("Cada fatura paga precisa ter um ID único.");
+    if (!card) throw new Error("A fatura paga referencia um cartão inexistente.");
+    if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(date)) throw new Error("A fatura paga precisa ter uma data válida.");
+    if (!isFinite(amount) || amount <= 0) throw new Error("O valor da fatura paga precisa ser maior que zero.");
+    if (!transactionId) throw new Error("A fatura paga precisa indicar o lançamento correspondente.");
+    if (accountId !== card.accountId) throw new Error("A fatura paga precisa sair da conta atrelada ao cartão.");
+    paymentById[id] = { cardId, accountId, transactionId, date, amount };
+  });
+
+  (transactions || []).forEach((transaction) => {
+    if (!transaction || typeof transaction !== "object" || Array.isArray(transaction)) return;
+    const id = String(transaction.id || "").trim();
+    if (id) transactionById[id] = transaction;
+    const paymentId = String(transaction.cardPaymentId || "").trim();
+    if (!paymentId) return;
+    if (transactionByPayment[paymentId]) throw new Error("Uma fatura paga não pode ter mais de um lançamento.");
+    const payment = paymentById[paymentId];
+    const card = payment && cardById[payment.cardId];
+    if (!payment || !card) throw new Error("O lançamento de cartão referencia uma fatura inexistente.");
+    if (String(transaction.cardId || "") !== payment.cardId || String(transaction.accountId || "") !== card.accountId) throw new Error("O lançamento da fatura não confere com o cartão e a conta atrelada.");
+    if (String(transaction.type || "") !== "saida" || !isFinite(Number(transaction.amount)) || Math.abs(Number(transaction.amount) - payment.amount) > 0.005 || String(transaction.date || "") !== payment.date) throw new Error("O lançamento da fatura precisa ser uma saída com a mesma data e valor.");
+    transactionByPayment[paymentId] = transaction;
+  });
+
+  Object.keys(paymentById).forEach((paymentId) => {
+    const payment = paymentById[paymentId];
+    const transaction = transactionByPayment[paymentId];
+    if (!transaction || String(transaction.id || "") !== payment.transactionId || transactionById[payment.transactionId] !== transaction) throw new Error("Cada fatura paga precisa ter seu lançamento de saída correspondente.");
   });
 }
 
