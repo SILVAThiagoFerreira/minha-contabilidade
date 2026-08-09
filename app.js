@@ -495,13 +495,23 @@
     throw new Error("Não foi possível compactar essa foto dentro do limite seguro. Escolha outra imagem.");
   }
 
+  function profilePhotoErrorMessage(error) {
+    const message = String(error?.message || "");
+    if (/payload|limite|cofre|planilha|50 mil|50\.000/i.test(message)) {
+      return "A foto foi selecionada, mas o armazenamento online recusou o cofre por limite de tamanho. Reduza alguns dados e tente novamente.";
+    }
+    return message || "Não foi possível concluir o upload da foto. Tente novamente.";
+  }
+
   function openProfilePhotoEditor(file) {
     const reader = new FileReader();
-    reader.onerror = () => showToast("Não foi possível abrir a foto selecionada.", "error");
+    reader.onerror = () => showToast("Não foi possível abrir a foto selecionada. Escolha o arquivo novamente.", "error");
     reader.onload = () => {
-      const sourceImage = new Image();
-      sourceImage.onerror = () => showToast("Não foi possível ler a foto selecionada.", "error");
+      try {
+        const sourceImage = new Image();
+        sourceImage.onerror = () => showToast("Não foi possível ler a foto selecionada. Use JPG, PNG ou WebP.", "error");
       sourceImage.onload = () => {
+        try {
       const dialog = document.createElement("dialog");
       dialog.className = "photo-editor-dialog";
       dialog.innerHTML = `<form method="dialog" class="photo-editor"><div><p class="eyebrow">FOTO DO PERFIL</p><h3>Ajuste o enquadramento</h3><p class="settings-copy">Arraste a foto na grade ou use os controles para centralizar o que aparecerá no seu perfil.</p></div><div class="photo-editor-preview" aria-label="Prévia da foto. Arraste para ajustar o enquadramento" role="application" tabindex="0"></div><label class="field"><span>Zoom</span><input name="zoom" type="range" min="1" max="3" step="0.01" value="1" /></label><label class="field"><span>Posição horizontal</span><input name="x" type="range" min="0" max="1" step="0.01" value="0.5" /></label><label class="field"><span>Posição vertical</span><input name="y" type="range" min="0" max="1" step="0.01" value="0.5" /></label><div class="profile-photo-actions"><button class="button button--secondary" value="cancel">Cancelar</button><button class="button button--primary" value="apply">Aplicar foto</button></div></form>`;
@@ -560,12 +570,21 @@
             renderSettings();
             showToast("Foto do perfil atualizada.");
           }
-        } catch (error) { showToast(error.message || "Não foi possível atualizar a foto.", "error"); }
+        } catch (error) { showToast(profilePhotoErrorMessage(error), "error"); }
         finally { dialog.remove(); }
       }, { once: true });
-      dialog.showModal();
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else if (typeof dialog.show === "function") dialog.show();
+      else dialog.setAttribute("open", "");
+      showToast("Imagem carregada. Ajuste o enquadramento e clique em Aplicar foto.");
+        } catch (error) {
+          showToast(profilePhotoErrorMessage(error), "error");
+        }
       };
-      sourceImage.src = reader.result;
+        sourceImage.src = String(reader.result || "");
+      } catch (error) {
+        showToast(profilePhotoErrorMessage(error), "error");
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -594,7 +613,12 @@
       if (error.name === "AbortError") throw new Error("O armazenamento online demorou demais para responder.");
       throw new Error("Não foi possível alcançar o armazenamento online.");
     } finally { window.clearTimeout(timeout); }
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (_) {
+      throw new Error("O armazenamento online respondeu em um formato inválido. Tente novamente; se persistir, o Apps Script precisa ser reimplantado.");
+    }
     if (!response.ok || result.ok === false || result.error || Number(result.statusCode) >= 400) throw new Error(result.error || "Não foi possível falar com o armazenamento online.");
     return result;
   }
@@ -605,7 +629,12 @@
     const timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...payload }), signal: controller.signal });
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (_) {
+        throw new Error("O armazenamento online respondeu em um formato inválido. Tente novamente.");
+      }
       if (!response.ok || result.ok === false || result.error || Number(result.statusCode) >= 400) throw new Error(result.error || "Não foi possível concluir esta solicitação.");
       return result;
     } catch (error) {
@@ -2350,16 +2379,25 @@
     if (!file) return;
     try {
       if (!/^image\/(jpeg|png|webp)$/i.test(file.type) || file.size > 5 * 1024 * 1024) throw new Error("Escolha uma imagem JPG, PNG ou WebP de até 5 MB.");
+      showToast("Preparando a imagem selecionada…");
       openProfilePhotoEditor(file);
     } catch (error) {
-      showToast(error.message || "Não foi possível atualizar a foto.", "error");
+      showToast(profilePhotoErrorMessage(error), "error");
     } finally { input.value = ""; }
   }
 
   async function removeProfilePhoto() {
     if (!vault.profile.avatarDataUrl) return;
+    const previousPhoto = vault.profile.avatarDataUrl;
     vault.profile.avatarDataUrl = "";
-    await saveCurrentVault();
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      vault.profile.avatarDataUrl = previousPhoto;
+      setSidebarAvatar();
+      renderSettings();
+      return;
+    }
     setSidebarAvatar();
     renderSettings();
     showToast("Foto do perfil removida.");

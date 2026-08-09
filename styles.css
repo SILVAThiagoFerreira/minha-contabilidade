@@ -93,7 +93,7 @@ h1, h2, h3, strong { font-family: var(--display); }
 .auth-privacy { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 /* App frame */
 .app-shell { display: flex; min-height: 100vh; }
-.sidebar { position: sticky; top: 0; display: flex; flex: 0 0 242px; flex-direction: column; width: 242px; min-height: 100vh; padding: 26px 17px 18px; color: #d6dfe4; background: var(--navy); }
+.sidebar { position: sticky; top: 0; display: flex; flex: 0 0 242px; flex-direction: column; width: 242px; height: 100vh; max-height: 100vh; min-height: 0; padding: 26px 17px 18px; overflow-x: clip; overflow-y: auto; overscroll-behavior-y: contain; color: #d6dfe4; background: var(--navy); }
 .brand-block { display: flex; align-items: center; gap: 11px; padding: 0 10px; }
 .brand-block > div:last-child { display: grid; gap: 0; }
 .brand-block strong { color: var(--white); font-size: 17px; letter-spacing: -.04em; line-height: 1; }
@@ -116,10 +116,11 @@ h1, h2, h3, strong { font-family: var(--display); }
 .avatar--photo { background-repeat: no-repeat; background-position: center; background-size: cover; }
 .icon-button { margin-left: auto; padding: 4px; border: 0; color: #8fa1ab; background: transparent; font-size: 18px; }
 .icon-button:hover { color: var(--white); }
-.content-shell { flex: 1; min-width: 0; }
-.topbar { display: flex; align-items: center; justify-content: space-between; min-height: 89px; padding: 0 clamp(24px, 4vw, 62px); border-bottom: 1px solid var(--line); background: var(--white); }
-.topbar-title h2 { margin-top: 5px; color: var(--ink); font-size: 19px; font-weight: 800; letter-spacing: -.035em; }
-.topbar-actions { display: flex; align-items: center; gap: 24px; }
+.content-shell { flex: 1; min-width: 0; overflow-x: clip; }
+.topbar { display: flex; align-items: center; justify-content: space-between; min-width: 0; min-height: 89px; padding: 0 clamp(24px, 4vw, 62px); border-bottom: 1px solid var(--line); background: var(--white); }
+.topbar-title { min-width: 0; }
+.topbar-title h2 { margin-top: 5px; overflow-wrap: anywhere; color: var(--ink); font-size: 19px; font-weight: 800; letter-spacing: -.035em; }
+.topbar-actions { display: flex; align-items: center; gap: 24px; min-width: 0; }
 .period-control { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .14em; }
 .period-control select { min-height: 34px; padding: 0 9px; font-size: 12px; letter-spacing: 0; }
 .sync-badge { display: inline-flex; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 20px; color: var(--muted); font-size: 10px; }
@@ -127,7 +128,7 @@ h1, h2, h3, strong { font-family: var(--display); }
 .menu-button { display: none; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 7px; color: var(--ink); background: transparent; font-size: 21px; }
 .menu-button:hover, .menu-button:focus-visible { color: var(--red-deep); background: var(--yellow-soft); outline: 0; }
 .sidebar-backdrop { display: none; }
-.main-content { width: min(100%, 1430px); margin: 0 auto; padding: clamp(30px, 4vw, 60px) clamp(24px, 4vw, 62px) 70px; }
+.main-content { width: min(100%, 1430px); min-width: 0; margin: 0 auto; padding: clamp(30px, 4vw, 60px) clamp(24px, 4vw, 62px) 70px; }
 .view { display: none; animation: view-in .22s ease both; }
 .view.is-active { display: block; }
 @keyframes view-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -157,8 +158,8 @@ h1, h2, h3, strong { font-family: var(--display); }
 .metric-meta { margin-top: 7px; color: var(--muted); font-size: 11px; }
 .admin-nav-item { border-left-color: rgba(243,178,26,.45); }
 .admin-activity-chart { min-height: 230px; }
-.admin-chart-bars { display: flex; align-items: stretch; gap: 10px; min-height: 220px; padding: 16px 0 3px; overflow-x: auto; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent 53px, rgba(17,17,17,.06) 54px); scrollbar-gutter: stable; }
-.admin-chart-column { display: grid; grid-template-rows: minmax(4px, 1fr) auto; flex: 1 0 42px; align-items: end; gap: 9px; min-width: 42px; height: 205px; text-align: center; }
+.admin-chart-bars { display: flex; align-items: stretch; gap: 10px; min-height: 220px; padding: 16px 0 3px; overflow: hidden; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent 53px, rgba(17,17,17,.06) 54px); }
+.admin-chart-column { display: grid; grid-template-rows: minmax(4px, 1fr) auto; flex: 1 1 0; align-items: end; gap: 9px; min-width: 0; height: 205px; text-align: center; }
 .admin-chart-bar { align-self: end; width: min(34px, 100%); margin: 0 auto; min-height: 4px; background: #f3b21a; transition: height .35s ease, transform .16s ease, box-shadow .16s ease; }
 .admin-chart-column small { display: block; min-height: 1.3em; overflow: hidden; color: var(--muted); font-size: 9px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-grid, .analysis-grid { display: grid; grid-template-columns: minmax(0, 1.63fr) minmax(300px, .9fr); gap: 16px; margin-bottom: 16px; }
@@ -169,7 +170,7 @@ h1, h2, h3, strong { font-family: var(--display); }
 .panel-period { color: var(--muted); font-size: 11px; }
 .link-button { padding: 0; border: 0; color: var(--red); background: transparent; font-size: 11px; font-weight: 700; }
 .link-button:hover { text-decoration: underline; }
-.cashflow-chart { display: flex; align-items: flex-end; justify-content: space-between; gap: 13px; height: 190px; padding: 15px 0 0; border-bottom: 1px solid var(--line); }
+.cashflow-chart { display: flex; align-items: flex-end; justify-content: space-between; gap: 13px; height: 190px; min-width: 0; padding: 15px 0 0; overflow: hidden; border-bottom: 1px solid var(--line); }
 .cash-bar-group { display: flex; flex: 1; align-items: flex-end; justify-content: center; gap: 5px; height: 100%; }
 .cash-bar { width: min(24px, 42%); min-height: 3px; transition: height .35s ease, transform .16s ease, box-shadow .16s ease; }
 .cash-bar--income { background: #f3b21a; }
@@ -219,18 +220,19 @@ h1, h2, h3, strong { font-family: var(--display); }
 .segmented-control span { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
 .check-field { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .check-field input { width: 16px; height: 16px; accent-color: var(--red); }
-.panel--table { overflow: hidden; }
+.panel--table { overflow: visible; }
 .panel-heading--filters { align-items: center; }
 .mini-filter { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
 .mini-filter select { min-height: 32px; width: auto; padding: 0 8px; color: var(--ink); font-size: 11px; letter-spacing: 0; }
-.data-table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.data-table th { padding: 0 10px 12px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-align: left; white-space: nowrap; }
-.data-table td { padding: 13px 10px; border-top: 1px solid var(--line); color: var(--ink); vertical-align: middle; white-space: nowrap; }
+.data-table-wrap { max-width: 100%; overflow: visible; }
+.data-table { width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+.data-table--transactions { min-width: 0; }
+.data-table th { padding: 0 10px 12px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-align: left; overflow-wrap: anywhere; white-space: normal; }
+.data-table td { padding: 13px 10px; border-top: 1px solid var(--line); color: var(--ink); vertical-align: middle; overflow-wrap: anywhere; white-space: normal; }
 .data-table th:first-child, .data-table td:first-child { padding-left: 0; }
 .data-table th:last-child, .data-table td:last-child { padding-right: 0; text-align: right; }
 .data-table .number { font-family: var(--display); font-weight: 700; text-align: right; }
-.table-sort-button { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; text-align: inherit; cursor: pointer; }
+.table-sort-button { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-height: 36px; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-size: inherit; font-weight: inherit; letter-spacing: inherit; text-align: inherit; cursor: pointer; }
 .table-sort-button:hover, .table-sort-button:focus-visible { color: var(--red); outline: none; }
 .table-sort-button:focus-visible { box-shadow: 0 0 0 2px rgba(196, 63, 78, .25); }
 .table-sort-header--right { text-align: right !important; }
@@ -240,13 +242,13 @@ h1, h2, h3, strong { font-family: var(--display); }
 .type-label { display: inline-flex; align-items: center; gap: 6px; }
 .type-label::before { width: 6px; height: 6px; content: ""; background: var(--red); }
 .type-label--income::before { background: var(--green); }
-.table-actions { display: inline-flex; gap: 5px; opacity: .55; }
+.table-actions { display: inline-flex; flex-wrap: wrap; gap: 5px; max-width: 100%; opacity: .55; }
 .table-action { min-width: 40px; min-height: 40px; padding: 5px 7px; border: 1px solid transparent; color: var(--muted); background: transparent; font-size: 14px; }
 .table-action:hover, .table-action:focus-visible { border-color: var(--line); color: var(--red); background: #fff7f8; }
 .table-action:hover { color: var(--red); }
-.investment-table { min-width: 1060px; }
-.investment-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
-.investment-action { min-height: 40px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); background: var(--white); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.investment-table { min-width: 0; }
+.investment-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
+.investment-action { min-height: 40px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink); background: var(--white); font-size: 10px; font-weight: 700; overflow-wrap: anywhere; white-space: normal; }
 .investment-action:hover, .investment-action:focus-visible { border-color: var(--red); color: var(--red); background: #fff7f8; outline: 0; }
 .investment-action--aporte { color: var(--green); }
 .investment-action--resgate { color: var(--red-deep); }
@@ -314,7 +316,7 @@ h1, h2, h3, strong { font-family: var(--display); }
 .insight-card .eyebrow { color: var(--muted); }
 .insight-card h3 { margin-top: 11px; font-size: 18px; letter-spacing: -.035em; }
 .insight-card p { margin-top: 5px; color: var(--muted); font-size: 11px; }
-.analysis-bars { display: flex; align-items: flex-end; gap: 14px; height: 244px; padding: 10px 3px 26px; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), rgba(17,17,17,.065) calc(25% - 1px), rgba(17,17,17,.065) 25%); }
+.analysis-bars { display: flex; align-items: flex-end; gap: 14px; height: 244px; min-width: 0; padding: 10px 3px 26px; overflow: hidden; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), rgba(17,17,17,.065) calc(25% - 1px), rgba(17,17,17,.065) 25%); }
 .analysis-bar-group { position: relative; display: flex; flex: 1; align-items: flex-end; justify-content: center; gap: 4px; height: 100%; }
 .analysis-bar { width: min(31px, 42%); min-height: 3px; transition: transform .16s ease, box-shadow .16s ease; }
 .chart-bar-interactive { position: relative; cursor: help; }
@@ -494,19 +496,19 @@ h1, h2, h3, strong { font-family: var(--display); }
   .transfer-history-heading { display: block; }
   .transfer-history-heading small { display: block; margin-top: 5px; }
   .savings-row-values span { text-align: left; }
-  .data-table-wrap { position: relative; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
-  .data-table { min-width: 555px; }
-  .panel--table .data-table-wrap { margin-right: -16px; padding-right: 16px; }
-  .data-table--transactions { min-width: 0; }
-  .panel--table .data-table-wrap:has(.data-table--transactions) { margin-right: 0; padding-right: 0; overflow-x: visible; }
-  .data-table--transactions thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-  .data-table--transactions, .data-table--transactions tbody, .data-table--transactions tr, .data-table--transactions td { display: block; width: 100%; }
-  .data-table--transactions tr { padding: 11px 0; border-top: 1px solid var(--line); }
-  .data-table--transactions td { display: grid; grid-template-columns: minmax(88px, .72fr) minmax(0, 1.28fr); gap: 9px; padding: 5px 0; border: 0; white-space: normal; text-align: right; }
-  .data-table--transactions td::before { content: attr(data-label); color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .09em; text-align: left; }
-  .data-table--transactions td:first-child, .data-table--transactions td:last-child { padding-right: 0; padding-left: 0; text-align: right; }
-  .data-table--transactions td:last-child { min-height: 32px; }
-  .data-table--transactions .table-actions { justify-self: end; opacity: 1; }
+  .data-table-wrap { position: relative; max-width: 100%; overflow: visible; }
+  .data-table { display: block; min-width: 0; table-layout: auto; }
+  .data-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .data-table tbody { display: grid; width: 100%; }
+  .data-table tr { display: grid; width: 100%; gap: 0; padding: 11px 0; border-top: 1px solid var(--line); }
+  .data-table td { display: grid; grid-template-columns: minmax(88px, .72fr) minmax(0, 1.28fr); gap: 9px; width: 100%; padding: 5px 0; border: 0; overflow-wrap: anywhere; white-space: normal; text-align: right; }
+  .data-table td::before { content: attr(data-label); color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .09em; text-align: left; }
+  .data-table td:first-child, .data-table td:last-child { padding-right: 0; padding-left: 0; text-align: right; }
+  .data-table td:last-child { min-height: 32px; }
+  .data-table .table-actions { justify-self: end; opacity: 1; }
+  .data-table .investment-actions { justify-content: flex-end; }
+  .data-table .investment-action { flex: 1 1 82px; min-height: 35px; }
+  .data-table .number { white-space: nowrap; }
   .dialog-actions { display: grid; grid-template-columns: 1fr; }
   .dialog-actions .button { width: 100%; }
   .investment-operation-dialog { width: min(100% - 20px, 560px); max-height: calc(100dvh - 20px); }
@@ -540,4 +542,84 @@ h1, h2, h3, strong { font-family: var(--display); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Tabelas responsivas: conteúdo se adapta antes de recorrer a uma faixa horizontal. */
+@media (max-width: 680px) {
+  #transferTable .data-table td:nth-child(1)::before { content: "Data"; }
+  #transferTable .data-table td:nth-child(2)::before { content: "Origem"; }
+  #transferTable .data-table td:nth-child(3)::before { content: "Destino"; }
+  #transferTable .data-table td:nth-child(4)::before { content: "Valor"; }
+  #transferTable .data-table td:nth-child(5)::before { content: "Ações"; }
+
+  #debtTable .data-table td:nth-child(1)::before { content: "Dívida"; }
+  #debtTable .data-table td:nth-child(2)::before { content: "Credor"; }
+  #debtTable .data-table td:nth-child(3)::before { content: "Saldo atual"; }
+  #debtTable .data-table td:nth-child(4)::before { content: "Parcela mensal"; }
+  #debtTable .data-table td:nth-child(5)::before { content: "Vencimento"; }
+  #debtTable .data-table td:nth-child(6)::before { content: "Conta"; }
+  #debtTable .data-table td:nth-child(7)::before { content: "Status"; }
+  #debtTable .data-table td:nth-child(8)::before { content: "Ações"; }
+
+  #fixedAgendaTable .data-table td:nth-child(1)::before,
+  #fixedCostTable .data-table td:nth-child(1)::before { content: "Vencimento"; }
+  #fixedAgendaTable .data-table td:nth-child(2)::before,
+  #fixedCostTable .data-table td:nth-child(2)::before { content: "Descrição"; }
+  #fixedAgendaTable .data-table td:nth-child(3)::before,
+  #fixedCostTable .data-table td:nth-child(3)::before { content: "Categoria"; }
+  #fixedAgendaTable .data-table td:nth-child(4)::before { content: "Valor"; }
+  #fixedAgendaTable .data-table td:nth-child(5)::before { content: "Status"; }
+  #fixedAgendaTable .data-table td:nth-child(6)::before { content: "Ações"; }
+  #fixedCostTable .data-table td:nth-child(4)::before { content: "Conta"; }
+  #fixedCostTable .data-table td:nth-child(5)::before { content: "Valor"; }
+  #fixedCostTable .data-table td:nth-child(6)::before { content: "Status"; }
+  #fixedCostTable .data-table td:nth-child(7)::before { content: "Ações"; }
+
+  #cdbTable .data-table td:nth-child(1)::before { content: "Investimento"; }
+  #cdbTable .data-table td:nth-child(2)::before { content: "Tipo"; }
+  #cdbTable .data-table td:nth-child(3)::before { content: "Conta / banco"; }
+  #cdbTable .data-table td:nth-child(4)::before { content: "Aplicado"; }
+  #cdbTable .data-table td:nth-child(5)::before { content: "Valor atual"; }
+  #cdbTable .data-table td:nth-child(6)::before { content: "Referência"; }
+  #cdbTable .data-table td:nth-child(7)::before { content: "Projeção / mês"; }
+  #cdbTable .data-table td:nth-child(8)::before { content: "Vencimento"; }
+  #cdbTable .data-table td:nth-child(9)::before { content: "Ações"; }
+
+  #patrimonyTable .data-table td:nth-child(1)::before { content: "Bem"; }
+  #patrimonyTable .data-table td:nth-child(2)::before { content: "Tipo"; }
+  #patrimonyTable .data-table td:nth-child(3)::before { content: "Valor atual"; }
+  #patrimonyTable .data-table td:nth-child(4)::before { content: "Data de referência"; }
+  #patrimonyTable .data-table td:nth-child(5)::before { content: "Observação"; }
+  #patrimonyTable .data-table td:nth-child(6)::before { content: "Ações"; }
+
+  #analysisEssentialCosts .data-table td:nth-child(1)::before { content: "Mês"; }
+  #analysisEssentialCosts .data-table td:nth-child(2)::before { content: "Transporte"; }
+  #analysisEssentialCosts .data-table td:nth-child(3)::before { content: "Alimentação"; }
+  #analysisEssentialCosts .data-table td:nth-child(4)::before { content: "Salários recebidos"; }
+  #analysisInvestmentFlow .data-table td:nth-child(1)::before,
+  #analysisTable .data-table td:nth-child(1)::before { content: "Mês"; }
+  #analysisInvestmentFlow .data-table td:nth-child(2)::before { content: "Aporte"; }
+  #analysisInvestmentFlow .data-table td:nth-child(3)::before { content: "Resgate"; }
+  #analysisInvestmentFlow .data-table td:nth-child(4)::before { content: "Líquido investido"; }
+  #analysisInvestmentFlow .data-table td:nth-child(5)::before { content: "Relação"; }
+  #analysisTable .data-table td:nth-child(2)::before { content: "Entradas"; }
+  #analysisTable .data-table td:nth-child(3)::before { content: "Saídas"; }
+  #analysisTable .data-table td:nth-child(4)::before { content: "Resultado"; }
+  #analysisTable .data-table td:nth-child(5)::before { content: "Taxa de sobra"; }
+  #analysisInvestments .data-table td:nth-child(1)::before,
+  #analysisPatrimony .data-table td:nth-child(1)::before { content: "Tipo"; }
+  #analysisInvestments .data-table td:nth-child(2)::before,
+  #analysisPatrimony .data-table td:nth-child(2)::before { content: "Itens"; }
+  #analysisInvestments .data-table td:nth-child(3)::before,
+  #analysisPatrimony .data-table td:nth-child(3)::before { content: "Valor"; }
+  #analysisInvestments .data-table td:nth-child(4)::before,
+  #analysisPatrimony .data-table td:nth-child(4)::before { content: "Participação"; }
+
+  #adminUsersTable .data-table td:nth-child(1)::before { content: "Usuário"; }
+  #adminUsersTable .data-table td:nth-child(2)::before { content: "Cadastro"; }
+  #adminUsersTable .data-table td:nth-child(3)::before { content: "Último acesso"; }
+  #adminUsersTable .data-table td:nth-child(4)::before { content: "Status"; }
+  #adminSystemTable .data-table td:nth-child(1)::before { content: "Indicador"; }
+  #adminSystemTable .data-table td:nth-child(2)::before { content: "Status"; }
+  #adminSystemTable .data-table td:nth-child(3)::before { content: "Detalhe"; }
 }

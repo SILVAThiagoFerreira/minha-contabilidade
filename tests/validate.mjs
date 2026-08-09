@@ -155,11 +155,15 @@ assert.match(js, /handlePasswordRecoveryRequest/, "o frontend precisa solicitar 
 assert.match(js, /handlePasswordRecoveryConfirm/, "o frontend precisa confirmar a nova senha pelo token");
 assert.match(js, /email_missing/, "usuários sem e-mail precisam receber o aviso de recuperação indisponível");
 assert.match(js, /openProfilePhotoEditor/, "a foto precisa oferecer ajuste de enquadramento antes de salvar");
+assert.match(js, /profilePhotoErrorMessage/, "o upload precisa transformar falhas técnicas em mensagem visível");
+assert.match(js, /Preparando a imagem selecionada/, "a seleção precisa dar feedback imediato");
+assert.match(js, /Imagem carregada\. Ajuste o enquadramento/, "a imagem selecionada precisa confirmar que o editor abriu");
 assert.match(html, /profileEmail/, "as configurações precisam solicitar um e-mail de recuperação");
 assert.match(html, /profileEmailNotice/, "usuários sem e-mail precisam receber uma orientação visível");
 assert.match(js, /resizeProfilePhoto/, "a foto precisa ser reduzida antes da sincronização");
 assert.match(js, /typeof createImageBitmap === "function"/, "o upload de foto precisa ter alternativa para navegadores sem createImageBitmap");
 assert.match(js, /previousPhoto = vault\.profile\.avatarDataUrl/, "o upload precisa preservar a foto anterior quando a sincronização falhar");
+assert.match(js, /async function removeProfilePhoto[\s\S]*previousPhoto = vault\.profile\.avatarDataUrl/, "a remoção precisa restaurar a foto quando a sincronização falhar");
 assert.match(js, /MAX_VAULT_PAYLOAD_CHARS = 49000/, "o cliente precisa usar o limite de cofre compatível com fotos compactadas");
 assert.match(js, /PROFILE_PHOTO_SYNC_COMPATIBLE_PAYLOAD_CHARS = 45000/, "a foto precisa manter compatibilidade com a versão anterior da sincronização");
 assert.match(js, /pointerdown/, "o enquadramento da foto precisa permitir ajuste direto na grade");

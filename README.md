@@ -14,6 +14,7 @@ Painel online para organizar entradas, saídas, contas bancárias, patrimônio d
 - transferências entre contas, com saída identificada na origem e entrada correspondente no destino;
 - contas correntes e poupanças por banco;
 - investimentos vinculados diretamente a uma conta já cadastrada;
+- módulo Cartões para cadastrar cartões de crédito ou débito, atrelar cada cartão a uma conta e registrar faturas pagas como saídas na conta correta;
 - gerenciamento de poupança com estimativa mensal e correção manual pelo extrato;
 - custos fixos ativos ou pausados;
 - agenda mensal dos custos fixos, com referência de concluído e indicadores de total, pago e a pagar;
@@ -54,6 +55,12 @@ O relatório também inclui uma seção auxiliar para imposto de renda com os da
 ## Configuração
 
 Consulte [docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md](docs/CONFIGURAR_GOOGLE_APPS_SCRIPT.md). O ID da planilha fica somente nas propriedades privadas do Apps Script. A URL pública do Web App é necessária no config.js para o Pages conseguir sincronizar. A visão pública de arquitetura está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), as regras de proteção em [SECURITY.md](SECURITY.md) e o guia de contribuição em [CONTRIBUTING.md](CONTRIBUTING.md). Para referências operacionais privadas, copie `docs/OPERATIONS_PRIVATE.md.example` para o arquivo local ignorado `docs/OPERATIONS_PRIVATE.md` e preencha somente fora do Git. O estado e os requisitos da recuperação de acesso estão em [docs/RECUPERACAO_DE_ACESSO.md](docs/RECUPERACAO_DE_ACESSO.md). O provisionamento privado e as métricas do painel administrativo estão em [docs/ADMINISTRACAO.md](docs/ADMINISTRACAO.md).
+
+Em `Configurações`, a foto do perfil é preparada no navegador, pode ser reenquadrada e só substitui a anterior depois que a sincronização online confirma a gravação. A seleção, a abertura do editor e as falhas de limite ou de comunicação agora têm feedback visível; se a gravação falhar, a foto anterior é restaurada.
+
+## Cartões
+
+Em `Cartões`, cadastre o nome, o tipo (crédito ou débito) e a conta atrelada. Ao registrar uma fatura paga, informe a data e o valor; o sistema cria uma saída vinculada ao cartão e usa automaticamente a conta atrelada, sem permitir que a conta seja trocada por engano. O cadastro de cartões e o histórico de faturas fazem parte do mesmo cofre online e preservam os lançamentos existentes.
 
 ## Investimentos
 
