@@ -6,6 +6,7 @@
     dashboard: "Visão geral",
     lancamentos: "Lançamentos",
     contas: "Contas",
+    cartoes: "Cartões",
     dividas: "Dívidas",
     fixos: "Custos fixos",
     cdb: "Investimentos",
@@ -205,6 +206,8 @@
       version: 1,
       profile: { displayName, email: "", avatarDataUrl: "", currency: "BRL", monthlySalary: 0, averageMonthlySalaryWithOvertime: 0, customCategories: [] },
       accounts: [],
+      cards: [],
+      cardPayments: [],
       debts: [],
       transactions: [],
       transfers: [],
@@ -222,6 +225,69 @@
     const value = String(category || "").trim();
     if (value === "Salário mensal") return "Salário mensal (Carteira de trabalho)";
     return !value || value.toLowerCase() === "outros" ? UNAVAILABLE_CATEGORY : value;
+  }
+
+  function normalizeCardType(value) {
+    const type = String(value || "").trim().toLowerCase();
+    return type === "credito" || type === "debito" ? type : "";
+  }
+
+  function isIsoDate(value) {
+    return /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(String(value || "").trim());
+  }
+
+  function validateCardsPayload(cards, cardPayments, transactions, accounts) {
+    const accountIds = new Set((accounts || []).map((account) => String(account?.id || "").trim()).filter(Boolean));
+    const cardById = new Map();
+    (cards || []).forEach((card) => {
+      if (!card || typeof card !== "object" || Array.isArray(card)) throw new Error("Cartão inválido.");
+      const id = String(card.id || "").trim();
+      const name = String(card.name || "").trim();
+      const type = normalizeCardType(card.type);
+      const accountId = String(card.accountId || "").trim();
+      if (!id || cardById.has(id)) throw new Error("Cada cartão precisa ter um ID único.");
+      if (!name || name.length > 100) throw new Error("Cada cartão precisa ter um nome de até 100 caracteres.");
+      if (!type) throw new Error("O tipo do cartão deve ser crédito ou débito.");
+      if (!accountId || !accountIds.has(accountId)) throw new Error("O cartão precisa estar vinculado a uma conta existente.");
+      if (card.active !== undefined && typeof card.active !== "boolean") throw new Error("O status ativo do cartão deve ser booleano.");
+      cardById.set(id, { ...card, id, type, accountId });
+    });
+
+    const paymentById = new Map();
+    (cardPayments || []).forEach((payment) => {
+      if (!payment || typeof payment !== "object" || Array.isArray(payment)) throw new Error("Fatura paga de cartão inválida.");
+      const id = String(payment.id || "").trim();
+      const cardId = String(payment.cardId || "").trim();
+      const accountId = String(payment.accountId || "").trim();
+      const transactionId = String(payment.transactionId || "").trim();
+      const amount = toAmount(payment.amount);
+      const card = cardById.get(cardId);
+      if (!id || paymentById.has(id)) throw new Error("Cada fatura paga precisa ter um ID único.");
+      if (!card) throw new Error("A fatura paga referencia um cartão inexistente.");
+      if (!isIsoDate(payment.date)) throw new Error("A fatura paga precisa ter uma data válida.");
+      if (!isFinite(amount) || amount <= 0) throw new Error("O valor da fatura paga precisa ser maior que zero.");
+      if (!transactionId) throw new Error("A fatura paga precisa indicar o lançamento correspondente.");
+      if (accountId !== card.accountId) throw new Error("A fatura paga precisa sair da conta atrelada ao cartão.");
+      paymentById.set(id, { ...payment, id, cardId, accountId, transactionId, amount });
+    });
+
+    const transactionByPayment = new Map();
+    (transactions || []).forEach((transaction) => {
+      const paymentId = String(transaction?.cardPaymentId || "").trim();
+      if (!paymentId) return;
+      if (transactionByPayment.has(paymentId)) throw new Error("Uma fatura paga não pode ter mais de um lançamento.");
+      const payment = paymentById.get(paymentId);
+      const card = payment ? cardById.get(payment.cardId) : null;
+      if (!payment || !card) throw new Error("O lançamento de cartão referencia uma fatura inexistente.");
+      if (String(transaction.cardId || "") !== card.id || String(transaction.accountId || "") !== card.accountId) throw new Error("O lançamento da fatura não confere com o cartão e a conta atrelada.");
+      if (transaction.type !== "saida" || Math.abs(toAmount(transaction.amount) - payment.amount) > 0.005 || String(transaction.date || "") !== payment.date) throw new Error("O lançamento da fatura precisa ser uma saída com a mesma data e valor.");
+      transactionByPayment.set(paymentId, transaction);
+    });
+
+    paymentById.forEach((payment) => {
+      const transaction = transactionByPayment.get(payment.id);
+      if (!transaction || String(transaction.id || "") !== payment.transactionId) throw new Error("Cada fatura paga precisa ter seu lançamento de saída correspondente.");
+    });
   }
 
   function tableSortHeader(table, key, label, options = {}) {
@@ -322,6 +388,8 @@
     normalized.profile.avatarDataUrl = normalizeProfilePhoto(normalized.profile.avatarDataUrl);
     normalized.profile.customCategories = normalizeCustomCategories(normalized.profile.customCategories);
     normalized.accounts = Array.isArray(value?.accounts) ? value.accounts : [];
+    normalized.cards = Array.isArray(value?.cards) ? value.cards.map((item) => ({ ...item, type: normalizeCardType(item?.type) })) : [];
+    normalized.cardPayments = Array.isArray(value?.cardPayments) ? value.cardPayments.map((item) => ({ ...item, amount: toAmount(item?.amount) })) : [];
     normalized.debts = Array.isArray(value?.debts) ? value.debts : [];
     normalized.transactions = Array.isArray(value?.transactions)
       ? value.transactions.map((item) => ({ ...item, category: normalizeLaunchCategory(item?.category) }))
@@ -427,13 +495,23 @@
     throw new Error("Não foi possível compactar essa foto dentro do limite seguro. Escolha outra imagem.");
   }
 
+  function profilePhotoErrorMessage(error) {
+    const message = String(error?.message || "");
+    if (/payload|limite|cofre|planilha|50 mil|50\.000/i.test(message)) {
+      return "A foto foi selecionada, mas o armazenamento online recusou o cofre por limite de tamanho. Reduza alguns dados e tente novamente.";
+    }
+    return message || "Não foi possível concluir o upload da foto. Tente novamente.";
+  }
+
   function openProfilePhotoEditor(file) {
     const reader = new FileReader();
-    reader.onerror = () => showToast("Não foi possível abrir a foto selecionada.", "error");
+    reader.onerror = () => showToast("Não foi possível abrir a foto selecionada. Escolha o arquivo novamente.", "error");
     reader.onload = () => {
-      const sourceImage = new Image();
-      sourceImage.onerror = () => showToast("Não foi possível ler a foto selecionada.", "error");
+      try {
+        const sourceImage = new Image();
+        sourceImage.onerror = () => showToast("Não foi possível ler a foto selecionada. Use JPG, PNG ou WebP.", "error");
       sourceImage.onload = () => {
+        try {
       const dialog = document.createElement("dialog");
       dialog.className = "photo-editor-dialog";
       dialog.innerHTML = `<form method="dialog" class="photo-editor"><div><p class="eyebrow">FOTO DO PERFIL</p><h3>Ajuste o enquadramento</h3><p class="settings-copy">Arraste a foto na grade ou use os controles para centralizar o que aparecerá no seu perfil.</p></div><div class="photo-editor-preview" aria-label="Prévia da foto. Arraste para ajustar o enquadramento" role="application" tabindex="0"></div><label class="field"><span>Zoom</span><input name="zoom" type="range" min="1" max="3" step="0.01" value="1" /></label><label class="field"><span>Posição horizontal</span><input name="x" type="range" min="0" max="1" step="0.01" value="0.5" /></label><label class="field"><span>Posição vertical</span><input name="y" type="range" min="0" max="1" step="0.01" value="0.5" /></label><div class="profile-photo-actions"><button class="button button--secondary" value="cancel">Cancelar</button><button class="button button--primary" value="apply">Aplicar foto</button></div></form>`;
@@ -492,12 +570,21 @@
             renderSettings();
             showToast("Foto do perfil atualizada.");
           }
-        } catch (error) { showToast(error.message || "Não foi possível atualizar a foto.", "error"); }
+        } catch (error) { showToast(profilePhotoErrorMessage(error), "error"); }
         finally { dialog.remove(); }
       }, { once: true });
-      dialog.showModal();
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else if (typeof dialog.show === "function") dialog.show();
+      else dialog.setAttribute("open", "");
+      showToast("Imagem carregada. Ajuste o enquadramento e clique em Aplicar foto.");
+        } catch (error) {
+          showToast(profilePhotoErrorMessage(error), "error");
+        }
       };
-      sourceImage.src = reader.result;
+        sourceImage.src = String(reader.result || "");
+      } catch (error) {
+        showToast(profilePhotoErrorMessage(error), "error");
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -526,7 +613,12 @@
       if (error.name === "AbortError") throw new Error("O armazenamento online demorou demais para responder.");
       throw new Error("Não foi possível alcançar o armazenamento online.");
     } finally { window.clearTimeout(timeout); }
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (_) {
+      throw new Error("O armazenamento online respondeu em um formato inválido. Tente novamente; se persistir, o Apps Script precisa ser reimplantado.");
+    }
     if (!response.ok || result.ok === false || result.error || Number(result.statusCode) >= 400) throw new Error(result.error || "Não foi possível falar com o armazenamento online.");
     return result;
   }
@@ -537,7 +629,12 @@
     const timeout = window.setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch(CONFIG.apiUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...payload }), signal: controller.signal });
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (_) {
+        throw new Error("O armazenamento online respondeu em um formato inválido. Tente novamente.");
+      }
       if (!response.ok || result.ok === false || result.error || Number(result.statusCode) >= 400) throw new Error(result.error || "Não foi possível concluir esta solicitação.");
       return result;
     } catch (error) {
@@ -568,6 +665,7 @@
   async function saveCurrentVault() {
     if (!vault || !session) return;
     syncLegacyCdbs();
+    validateCardsPayload(vault.cards, vault.cardPayments, vault.transactions, vault.accounts);
     vault.updatedAt = new Date().toISOString();
     saveQueue = saveQueue.catch(() => {}).then(async () => {
       const result = await remoteRequest("sync", session, vault, session.revision || 0);
@@ -839,6 +937,25 @@
     return vault.accounts.find((account) => account.id === accountId);
   }
 
+  function cardById(cardId) {
+    return vault.cards.find((card) => card.id === cardId);
+  }
+
+  function cardTypeLabel(type) {
+    return normalizeCardType(type) === "debito" ? "Débito" : "Crédito";
+  }
+
+  function cardPaymentById(paymentId) {
+    return vault.cardPayments.find((payment) => payment.id === paymentId);
+  }
+
+  function refreshCardPaymentAccount() {
+    const output = $("#cardPaymentAccount");
+    if (!output) return;
+    const card = cardById($("#cardPaymentCard")?.value);
+    output.textContent = card ? `${accountReportLabel(card.accountId)} · saída automática` : "Selecione um cartão para ver a conta atrelada.";
+  }
+
   function accountReportLabel(accountId, fallback = "não informado") {
     const account = accountById(accountId);
     if (!account) return fallback || "não informado";
@@ -965,10 +1082,13 @@
     ].join("");
     $("#transactionTable").innerHTML = items.length ? `<table class="data-table data-table--transactions"><thead><tr>${tableSortHeader("transactions", "date", "DATA")}${tableSortHeader("transactions", "description", "DESCRIÇÃO")}${tableSortHeader("transactions", "category", "CATEGORIA")}${tableSortHeader("transactions", "account", "CONTA")}${tableSortHeader("transactions", "amount", "VALOR", { align: "right" })}<th><span class="sr-only">Ações</span></th></tr></thead><tbody>${items.map((item) => {
       const transfer = item.transferId ? transferById(item.transferId) : null;
+      const cardPayment = item.cardPaymentId ? cardPaymentById(item.cardPaymentId) : null;
+      const card = cardPayment ? cardById(cardPayment.cardId) : null;
       const transferLabel = transfer ? `<span class="status-pill status-pill--blue" title="Movimentação interna entre contas">TRANSFERÊNCIA · ${item.transferRole === "origem" ? "SAÍDA" : "ENTRADA"}</span>` : "";
-      const actions = item.investmentOperationId ? `<span class="status-pill status-pill--muted" title="Movimentação controlada pela carteira de investimentos">INVESTIMENTO</span>` : item.transferId ? transferLabel : `<span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span>`;
-      const description = transfer ? `${escapeHtml(transfer.description || "Transferência entre contas")}<br><small class="muted-cell">${item.transferRole === "origem" ? `para ${escapeHtml(accountNames[transfer.destinationAccountId] || "outra conta")}` : `de ${escapeHtml(accountNames[transfer.sourceAccountId] || "outra conta")}`}</small>` : `<strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}`;
-      return `<tr><td data-label="Data">${formatDate(item.date)}</td><td data-label="Descrição">${description}</td><td data-label="Categoria">${transfer ? transferLabel : escapeHtml(item.category)}</td><td data-label="Conta">${escapeHtml(accountNames[item.accountId] || "—")}</td><td data-label="Valor" class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td data-label="Ações">${actions}</td></tr>`;
+      const cardLabel = cardPayment ? `<span class="status-pill status-pill--muted" title="Saída criada ao registrar uma fatura paga">CARTÃO · FATURA PAGA</span>` : "";
+      const actions = item.investmentOperationId ? `<span class="status-pill status-pill--muted" title="Movimentação controlada pela carteira de investimentos">INVESTIMENTO</span>` : item.cardPaymentId ? cardLabel : item.transferId ? transferLabel : `<span class="table-actions"><button class="table-action" type="button" data-action="edit-transaction" data-id="${item.id}" title="Editar">✎</button><button class="table-action" type="button" data-action="delete-transaction" data-id="${item.id}" title="Excluir">×</button></span>`;
+      const description = cardPayment ? `${escapeHtml(item.description || `Fatura paga · ${card?.name || "cartão"}`)}<br><small class="muted-cell">Conta atrelada: ${escapeHtml(accountNames[item.accountId] || "—")}</small>` : transfer ? `${escapeHtml(transfer.description || "Transferência entre contas")}<br><small class="muted-cell">${item.transferRole === "origem" ? `para ${escapeHtml(accountNames[transfer.destinationAccountId] || "outra conta")}` : `de ${escapeHtml(accountNames[transfer.sourceAccountId] || "outra conta")}`}</small>` : `<strong>${escapeHtml(item.description)}</strong>${item.notes ? `<br><small class="muted-cell">${escapeHtml(item.notes)}</small>` : ""}`;
+      return `<tr><td data-label="Data">${formatDate(item.date)}</td><td data-label="Descrição">${description}</td><td data-label="Categoria">${cardPayment ? cardLabel : transfer ? transferLabel : escapeHtml(item.category)}</td><td data-label="Conta">${escapeHtml(accountNames[item.accountId] || "—")}</td><td data-label="Valor" class="number ${item.type === "entrada" ? "positive-number" : "negative-number"}">${item.type === "entrada" ? "+" : "−"}${formatCurrency(item.amount)}</td><td data-label="Ações">${actions}</td></tr>`;
     }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum lançamento em ${periodLabel(period)}.</strong><span>Comece registrando uma entrada ou saída.</span><button class="button button--secondary" type="button" data-action="open-transaction">Adicionar lançamento</button></div>`;
   }
 
@@ -980,6 +1100,32 @@
     $("#accountList").innerHTML = vault.accounts.length ? vault.accounts.map((account) => `<div class="account-row"><div class="account-row-main"><span class="account-mark">${escapeHtml(account.name.slice(0, 2).toUpperCase())}</span><div><strong>${escapeHtml(account.name)}</strong><small>${account.type === "poupanca" ? "Poupança" : "Conta corrente"}${account.nickname ? ` · ${escapeHtml(account.nickname)}` : ""}</small></div></div><strong class="row-value">${formatCurrency(accountBalance(account.id))}</strong><span class="table-actions"><button class="table-action" type="button" data-action="delete-account" data-id="${account.id}" title="Excluir conta">×</button></span></div>`).join("") : `<div class="empty-state"><strong>Nenhuma conta cadastrada.</strong><span>Cadastre seu primeiro banco para acompanhar os saldos.</span></div>`;
     renderTransfers();
     renderSavingsManagement();
+  }
+
+  function renderCards() {
+    const period = currentPeriod();
+    const payments = vault.cardPayments.filter((payment) => isAllPeriods(period) || String(payment.date || "").startsWith(period));
+    const paidTotal = payments.reduce((sum, payment) => sum + toAmount(payment.amount), 0);
+    const accountOptions = vault.accounts.map((account) => ({ value: account.id, label: `${account.name} · ${account.type === "poupanca" ? "Poupança" : "Conta corrente"}` }));
+    const cardOptions = vault.cards.map((card) => ({ value: card.id, label: `${card.name} · ${cardTypeLabel(card.type)}` }));
+    populateSelect($("#cardAccount"), accountOptions.length ? accountOptions : [{ value: "", label: "Cadastre uma conta primeiro" }], $("#cardAccount")?.value || "");
+    populateSelect($("#cardPaymentCard"), cardOptions.length ? cardOptions : [{ value: "", label: "Cadastre um cartão primeiro" }], $("#cardPaymentCard")?.value || "");
+    $("#cardMetrics").innerHTML = [
+      metricCard("CARTÕES CADASTRADOS", String(vault.cards.length), "crédito e débito", "metric-card--accent"),
+      metricCard("FATURAS PAGAS", String(payments.length), periodLabel(period), "metric-card--positive"),
+      metricCard("TOTAL PAGO", formatShortCurrency(paidTotal), "saídas nas contas atreladas", "metric-card--warning")
+    ].join("");
+
+    $("#cardList").innerHTML = vault.cards.length ? `<table class="data-table"><thead><tr><th>CARTÃO</th><th>TIPO</th><th>CONTA ATRELADA</th><th>FATURAS PAGAS</th></tr></thead><tbody>${vault.cards.map((card) => {
+      const count = vault.cardPayments.filter((payment) => payment.cardId === card.id).length;
+      return `<tr><td><strong>${escapeHtml(card.name)}</strong></td><td><span class="status-pill status-pill--muted">${escapeHtml(cardTypeLabel(card.type))}</span></td><td>${escapeHtml(accountReportLabel(card.accountId))}</td><td>${count}</td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum cartão cadastrado.</strong><span>Cadastre um cartão e escolha a conta que pagará suas faturas.</span></div>`;
+
+    $("#cardPaymentTable").innerHTML = payments.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>CARTÃO</th><th>CONTA DE SAÍDA</th><th>VALOR</th><th>STATUS</th></tr></thead><tbody>${payments.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((payment) => {
+      const card = cardById(payment.cardId);
+      return `<tr><td>${formatDate(payment.date)}</td><td><strong>${escapeHtml(card?.name || "Cartão removido")}</strong><br><small class="muted-cell">${escapeHtml(cardTypeLabel(card?.type))}</small></td><td>${escapeHtml(accountReportLabel(payment.accountId))}</td><td class="number negative-number">−${formatCurrency(payment.amount)}</td><td><span class="status-pill status-pill--green">PAGA</span></td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhuma fatura paga em ${escapeHtml(periodLabel(period))}.</strong><span>Registre a primeira fatura paga para lançar a saída na conta atrelada.</span></div>`;
+    refreshCardPaymentAccount();
   }
 
   function renderTransfers() {
@@ -1613,6 +1759,7 @@
     renderDashboard();
     renderTransactions();
     renderAccounts();
+    renderCards();
     renderDebts();
     renderFixedCosts();
     renderInvestments();
@@ -1633,6 +1780,12 @@
     }
     if (form.id === "transferForm") {
       $("input[name='date']", form).value = todayIso();
+    }
+    if (form.id === "cardPaymentForm") {
+      $("input[name='date']", form).value = todayIso();
+    }
+    if (form.id === "cardForm") {
+      $("select[name='type']", form).value = "credito";
     }
     if (form.id === "fixedCostForm") {
       $("input[name='active']", form).checked = true;
@@ -1688,6 +1841,8 @@
   function fillDefaultForms() {
     clearForm($("#transactionForm"));
     clearForm($("#transferForm"));
+    clearForm($("#cardForm"));
+    clearForm($("#cardPaymentForm"));
     clearForm($("#debtForm"));
     clearForm($("#cdbForm"));
     clearForm($("#patrimonyForm"));
@@ -1696,6 +1851,7 @@
   async function deleteById(collection, id, message) {
     const target = vault[collection].find((item) => item.id === id);
     if (collection === "transactions" && target?.investmentOperationId) { showToast("Este lançamento pertence a uma operação de investimento e não pode ser removido isoladamente.", "error"); return; }
+    if (collection === "transactions" && target?.cardPaymentId) { showToast("Este lançamento pertence a uma fatura paga e não pode ser removido isoladamente.", "error"); return; }
     if (!window.confirm(message)) return;
     vault[collection] = vault[collection].filter((item) => item.id !== id);
     if (collection === "fixedCosts") vault.fixedCostPayments = vault.fixedCostPayments.filter((item) => item.fixedCostId !== id);
@@ -1821,6 +1977,60 @@
     clearForm(form);
     renderAll();
     showToast("Conta adicionada.");
+  }
+
+  async function handleCardSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const name = String(data.name || "").trim();
+    const type = normalizeCardType(data.type);
+    const account = accountById(data.accountId);
+    if (!name) { showToast("Informe o nome do cartão.", "error"); return; }
+    if (!type) { showToast("Selecione se o cartão é de crédito ou débito.", "error"); return; }
+    if (!account) { showToast("Selecione uma conta existente para atrelar o cartão.", "error"); return; }
+    const card = { id: uid("card"), name, type, accountId: account.id, active: true, createdAt: new Date().toISOString() };
+    vault.cards.push(card);
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      vault.cards = vault.cards.filter((item) => item.id !== card.id);
+      renderAll();
+      return;
+    }
+    clearForm(form);
+    renderAll();
+    showToast("Cartão cadastrado.");
+  }
+
+  async function handleCardPaymentSubmit(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const card = cardById(data.cardId);
+    const account = card ? accountById(card.accountId) : null;
+    const date = String(data.date || "").trim();
+    const amount = roundAmount(toAmount(data.amount));
+    if (!card || !account) { showToast("Cadastre um cartão com conta atrelada antes de pagar uma fatura.", "error"); return; }
+    if (!isIsoDate(date)) { showToast("Informe uma data válida para o pagamento.", "error"); return; }
+    if (amount <= 0) { showToast("Informe um valor maior que zero para a fatura.", "error"); return; }
+    const paymentId = uid("card-payment");
+    const transactionId = uid("tx");
+    const payment = { id: paymentId, cardId: card.id, accountId: account.id, date, amount, transactionId, createdAt: new Date().toISOString() };
+    const transaction = { id: transactionId, date, description: `Fatura paga · ${card.name}`, category: "Cartões", accountId: account.id, amount, type: "saida", notes: "Saída criada pelo módulo Cartões.", recurring: false, cardId: card.id, cardPaymentId: paymentId };
+    vault.cardPayments.push(payment);
+    vault.transactions.push(transaction);
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      vault.cardPayments = vault.cardPayments.filter((item) => item.id !== paymentId);
+      vault.transactions = vault.transactions.filter((item) => item.id !== transactionId);
+      renderAll();
+      return;
+    }
+    clearForm(form);
+    renderAll();
+    showToast("Fatura paga e saída lançada na conta atrelada.");
   }
 
   async function handleTransferSubmit(event) {
@@ -2169,23 +2379,32 @@
     if (!file) return;
     try {
       if (!/^image\/(jpeg|png|webp)$/i.test(file.type) || file.size > 5 * 1024 * 1024) throw new Error("Escolha uma imagem JPG, PNG ou WebP de até 5 MB.");
+      showToast("Preparando a imagem selecionada…");
       openProfilePhotoEditor(file);
     } catch (error) {
-      showToast(error.message || "Não foi possível atualizar a foto.", "error");
+      showToast(profilePhotoErrorMessage(error), "error");
     } finally { input.value = ""; }
   }
 
   async function removeProfilePhoto() {
     if (!vault.profile.avatarDataUrl) return;
+    const previousPhoto = vault.profile.avatarDataUrl;
     vault.profile.avatarDataUrl = "";
-    await saveCurrentVault();
+    try {
+      await saveCurrentVault();
+    } catch (error) {
+      vault.profile.avatarDataUrl = previousPhoto;
+      setSidebarAvatar();
+      renderSettings();
+      return;
+    }
     setSidebarAvatar();
     renderSettings();
     showToast("Foto do perfil removida.");
   }
 
   async function clearAllData() {
-    if (!window.confirm("Apagar todos os lançamentos, transferências, contas, dívidas, custos fixos, agenda, investimentos, patrimônio e configurações de poupança deste usuário? Essa ação não pode ser desfeita.")) return;
+    if (!window.confirm("Apagar todos os lançamentos, transferências, contas, cartões, faturas pagas, dívidas, custos fixos, agenda, investimentos, patrimônio e configurações de poupança deste usuário? Essa ação não pode ser desfeita.")) return;
     vault = blankVault(vault.profile.displayName);
     await saveCurrentVault();
     renderAll();
@@ -2201,9 +2420,10 @@
       vault.debts.some((item) => item.accountId === accountId),
       vault.fixedCosts.some((item) => item.accountId === accountId),
       vault.investments.some((item) => item.accountId === accountId),
-      vault.savings.some((item) => item.accountId === accountId)
+      vault.savings.some((item) => item.accountId === accountId),
+      vault.cards.some((item) => item.accountId === accountId)
     ];
-    if (references.some(Boolean)) { showToast("Não exclua uma conta que ainda está vinculada a lançamentos, transferências, custos, investimentos, dívidas ou poupança.", "error"); return; }
+    if (references.some(Boolean)) { showToast("Não exclua uma conta que ainda está vinculada a lançamentos, transferências, custos, investimentos, dívidas, poupança ou cartões.", "error"); return; }
     await deleteById("accounts", accountId, `Excluir a conta ${account.name}?`);
   }
 
@@ -2240,6 +2460,9 @@
     $("#transactionFilter").addEventListener("change", renderTransactions);
     $("#transactionForm").addEventListener("submit", handleTransactionSubmit);
     $("#accountForm").addEventListener("submit", handleAccountSubmit);
+    $("#cardForm").addEventListener("submit", handleCardSubmit);
+    $("#cardPaymentForm").addEventListener("submit", handleCardPaymentSubmit);
+    $("#cardPaymentCard").addEventListener("change", refreshCardPaymentAccount);
     $("#transferForm").addEventListener("submit", handleTransferSubmit);
     $("#debtForm").addEventListener("submit", handleDebtSubmit);
     $("#fixedCostForm").addEventListener("submit", handleFixedSubmit);
