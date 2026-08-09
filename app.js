@@ -1148,16 +1148,16 @@
       metricCard("TOTAL PAGO", formatShortCurrency(paidTotal), "saídas nas contas atreladas", "metric-card--warning")
     ].join("");
 
-    $("#cardList").innerHTML = vault.cards.length ? `<table class="data-table"><thead><tr><th>CARTÃO</th><th>TIPO</th><th>VENCIMENTO</th><th>CONTA ATRELADA</th><th>FATURAS PAGAS</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>${vault.cards.map((card) => {
+    $("#cardList").innerHTML = vault.cards.length ? `<table class="data-table cards-table"><thead><tr><th>CARTÃO</th><th>TIPO</th><th>VENCIMENTO</th><th>CONTA ATRELADA</th><th>FATURAS PAGAS</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>${vault.cards.map((card) => {
       const count = vault.cardPayments.filter((payment) => payment.cardId === card.id).length;
       const active = card.active !== false;
       return `<tr><td data-label="Cartão"><strong>${escapeHtml(card.name)}</strong></td><td data-label="Tipo"><span class="status-pill status-pill--muted">${escapeHtml(cardTypeLabel(card.type))}</span></td><td data-label="Vencimento">Dia ${normalizeCardDueDay(card.dueDay)}</td><td data-label="Conta atrelada">${escapeHtml(accountReportLabel(card.accountId))}</td><td data-label="Faturas pagas">${count}</td><td data-label="Ações"><span class="table-actions"><button class="table-action" type="button" data-action="edit-card" data-id="${card.id}" title="Editar cartão" aria-label="Editar cartão">✎</button><button class="table-action" type="button" data-action="toggle-card" data-id="${card.id}" title="${active ? "Excluir cartão sem apagar o histórico" : "Reativar cartão"}" aria-label="${active ? "Excluir cartão sem apagar o histórico" : "Reativar cartão"}">${active ? "×" : "↻"}</button></span></td></tr>`;
     }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhum cartão cadastrado.</strong><span>Cadastre um cartão e escolha a conta que pagará suas faturas.</span></div>`;
 
-    $("#cardPaymentTable").innerHTML = payments.length ? `<table class="data-table"><thead><tr><th>DATA</th><th>CARTÃO</th><th>CONTA DE SAÍDA</th><th>VALOR</th><th>VENCIMENTO</th><th>STATUS</th></tr></thead><tbody>${payments.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((payment) => {
+    $("#cardPaymentTable").innerHTML = payments.length ? `<table class="data-table card-payments-table"><thead><tr><th>DATA</th><th>CARTÃO</th><th>CONTA DE SAÍDA</th><th>VALOR</th><th>VENCIMENTO</th><th>STATUS</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody>${payments.slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).map((payment) => {
       const card = cardById(payment.cardId);
       const timing = cardPaymentTiming(payment, card);
-      return `<tr><td data-label="Data">${formatDate(payment.date)}</td><td data-label="Cartão"><strong>${escapeHtml(card?.name || "Cartão removido")}</strong><br><small class="muted-cell">${escapeHtml(cardTypeLabel(card?.type))}</small></td><td data-label="Conta de saída">${escapeHtml(accountReportLabel(payment.accountId))}</td><td data-label="Valor" class="number negative-number">−${formatCurrency(payment.amount)}</td><td data-label="Vencimento">${timing.dueDate ? formatDate(timing.dueDate) : "—"}</td><td data-label="Status"><span class="status-pill status-pill--${timing.tone}">${timing.label}</span></td></tr>`;
+      return `<tr><td data-label="Data">${formatDate(payment.date)}</td><td data-label="Cartão"><strong>${escapeHtml(card?.name || "Cartão removido")}</strong><br><small class="muted-cell">${escapeHtml(cardTypeLabel(card?.type))}</small></td><td data-label="Conta de saída">${escapeHtml(accountReportLabel(payment.accountId))}</td><td data-label="Valor" class="number negative-number">−${formatCurrency(payment.amount)}</td><td data-label="Vencimento">${timing.dueDate ? formatDate(timing.dueDate) : "—"}</td><td data-label="Status"><span class="status-pill status-pill--${timing.tone}">${timing.label}</span></td><td data-label="Ações"><span class="table-actions"><button class="table-action" type="button" data-action="edit-card-payment" data-id="${payment.id}" title="Editar pagamento" aria-label="Editar pagamento">✎</button><button class="table-action" type="button" data-action="delete-card-payment" data-id="${payment.id}" title="Excluir pagamento" aria-label="Excluir pagamento">×</button></span></td></tr>`;
     }).join("")}</tbody></table>` : `<div class="empty-state"><strong>Nenhuma fatura paga em ${escapeHtml(periodLabel(period))}.</strong><span>Registre a primeira fatura paga para lançar a saída na conta atrelada.</span></div>`;
     refreshCardPaymentAccount();
   }
@@ -1860,6 +1860,8 @@
     }
     if (form.id === "cardPaymentForm") {
       $("input[name='date']", form).value = todayIso();
+      $("select[name='cardId']", form).disabled = false;
+      setFormMode(form, "cardPayment", false);
     }
     if (form.id === "cardForm") {
       $("select[name='type']", form).value = "credito";
@@ -1914,6 +1916,10 @@
       if (eyebrow) eyebrow.textContent = editing ? "EDITAR CARTÃO" : "NOVO CARTÃO";
       if (title) title.textContent = editing ? "Editar cartão" : "Cadastrar cartão";
       if (submit) submit.textContent = editing ? "Salvar alterações" : "Salvar cartão";
+    } else if (entity === "cardPayment") {
+      if (eyebrow) eyebrow.textContent = editing ? "EDITAR PAGAMENTO" : "NOVA FATURA PAGA";
+      if (title) title.textContent = editing ? "Editar pagamento" : "Lançar pagamento";
+      if (submit) submit.textContent = editing ? "Salvar alterações" : "Registrar fatura paga";
     } else {
       if (eyebrow) eyebrow.textContent = editing ? "EDITAR INVESTIMENTO" : "NOVO INVESTIMENTO";
       if (title) title.textContent = editing ? "Editar investimento" : "Adicionar investimento";
@@ -2129,6 +2135,25 @@
     if (card.active === false) { showToast("Este cartão foi excluído para novos lançamentos. Reative-o no histórico para registrar outra fatura.", "error"); return; }
     if (!isIsoDate(date)) { showToast("Informe uma data válida para o pagamento.", "error"); return; }
     if (amount <= 0) { showToast("Informe um valor maior que zero para a fatura.", "error"); return; }
+    const existingIndex = vault.cardPayments.findIndex((item) => item.id === form.dataset.editId);
+    const existing = existingIndex >= 0 ? vault.cardPayments[existingIndex] : null;
+    if (existing && existing.cardId !== card.id) { showToast("O cartão do pagamento não pode ser trocado durante a edição.", "error"); return; }
+    if (existing) {
+      const transaction = vault.transactions.find((item) => item.id === existing.transactionId || item.cardPaymentId === existing.id);
+      if (!transaction) { showToast("O lançamento vinculado a esta fatura não foi encontrado.", "error"); return; }
+      const previousPayment = { ...existing };
+      const previousTransaction = { ...transaction };
+      existing.date = date;
+      existing.amount = amount;
+      transaction.date = date;
+      transaction.amount = amount;
+      transaction.description = `Fatura paga · ${card.name}`;
+      try { await saveCurrentVault(); } catch (error) { Object.assign(existing, previousPayment); Object.assign(transaction, previousTransaction); renderAll(); return; }
+      clearForm(form);
+      renderAll();
+      showToast("Pagamento atualizado.");
+      return;
+    }
     const paymentId = uid("card-payment");
     const transactionId = uid("tx");
     const payment = { id: paymentId, cardId: card.id, accountId: account.id, date, amount, transactionId, createdAt: new Date().toISOString() };
@@ -2485,6 +2510,35 @@
     showToast(hasPayments ? "Edite o cartão. A conta fica protegida pelo histórico das faturas." : "Edite os campos e salve novamente.");
   }
 
+  function editCardPayment(id) {
+    const payment = vault.cardPayments.find((item) => item.id === id);
+    if (!payment) return;
+    const form = $("#cardPaymentForm");
+    setView("cartoes");
+    form.dataset.editId = payment.id;
+    $("select[name='cardId']", form).value = payment.cardId;
+    $("select[name='cardId']", form).disabled = true;
+    $("input[name='date']", form).value = payment.date || todayIso();
+    setMoneyInputValue($("input[name='amount']", form), payment.amount);
+    setFormMode(form, "cardPayment", true);
+    form.closest(".form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+    refreshCardPaymentAccount();
+    showToast("Edite a data e o valor; a conta permanece vinculada ao cartão.");
+  }
+
+  async function deleteCardPayment(id) {
+    const payment = vault.cardPayments.find((item) => item.id === id);
+    if (!payment) return;
+    if (!window.confirm("Excluir este pagamento? A saída vinculada também será removida.")) return;
+    const previousPayments = vault.cardPayments.slice();
+    const previousTransactions = vault.transactions.slice();
+    vault.cardPayments = vault.cardPayments.filter((item) => item.id !== id);
+    vault.transactions = vault.transactions.filter((item) => item.id !== payment.transactionId && item.cardPaymentId !== id);
+    try { await saveCurrentVault(); } catch (error) { vault.cardPayments = previousPayments; vault.transactions = previousTransactions; renderAll(); return; }
+    renderAll();
+    showToast("Pagamento e saída vinculada removidos.");
+  }
+
   async function toggleCard(id) {
     const item = vault.cards.find((card) => card.id === id);
     if (!item) return;
@@ -2699,6 +2753,8 @@
       if (action === "edit-transaction") editTransaction(target.dataset.id);
       if (action === "edit-card") editCard(target.dataset.id);
       if (action === "toggle-card") await toggleCard(target.dataset.id);
+      if (action === "edit-card-payment") editCardPayment(target.dataset.id);
+      if (action === "delete-card-payment") await deleteCardPayment(target.dataset.id);
       if (action === "delete-account") await deleteAccount(target.dataset.id);
       if (action === "edit-debt") editDebt(target.dataset.id);
       if (action === "delete-debt") await deleteById("debts", target.dataset.id, "Excluir esta dívida?");
