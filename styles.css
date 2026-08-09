@@ -246,11 +246,18 @@ h1, h2, h3, strong { font-family: var(--display); }
 .table-action { min-width: 40px; min-height: 40px; padding: 5px 7px; border: 1px solid transparent; color: var(--muted); background: transparent; font-size: 14px; }
 .table-action:hover, .table-action:focus-visible { border-color: var(--line); color: var(--red); background: #fff7f8; }
 .table-action:hover { color: var(--red); }
-.cards-table, .card-payments-table { table-layout: auto; }
-.cards-table th, .card-payments-table th { overflow-wrap: normal; white-space: nowrap; }
-.cards-table th:first-child { min-width: 84px; }
-.cards-table th:nth-child(3) { min-width: 88px; }
-.cards-table th:nth-child(4) { min-width: 112px; }
+.cards-table { table-layout: fixed; }
+.cards-table th { overflow-wrap: normal; white-space: normal; }
+.cards-table th:nth-child(1) { width: 16%; }
+.cards-table th:nth-child(2) { width: 12%; }
+.cards-table th:nth-child(3) { width: 14%; }
+.cards-table th:nth-child(4) { width: 24%; }
+.cards-table th:nth-child(5) { width: 12%; }
+.cards-table th:nth-child(6) { width: 22%; }
+.cards-table td:not(:last-child) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cards-table td:last-child .table-actions { justify-content: flex-end; }
+.card-payments-table { table-layout: auto; }
+.card-payments-table th { overflow-wrap: normal; white-space: nowrap; }
 .card-payments-table th:nth-child(3) { min-width: 114px; }
 .card-payments-table th:nth-child(5) { min-width: 94px; }
 .card-payments-table th:nth-child(6) { min-width: 142px; }
