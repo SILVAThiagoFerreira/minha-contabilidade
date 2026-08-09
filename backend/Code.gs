@@ -490,6 +490,8 @@ function jsonPayload_(payload) {
     if (Array.isArray(payload[name]) && payload[name].length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de registros excedida em " + name + ".");
   });
   validateInvestmentOperations_(payload.investments || [], payload.transactions || []);
+  validateInvestmentCorrections_(payload.investments || []);
+  validateTransactions_(payload.transactions || [], payload.accounts || []);
   validateTransfers_(payload.transfers || [], payload.transactions || [], payload.accounts || []);
   validateCards_(payload.cards || [], payload.cardPayments || [], payload.transactions || [], payload.accounts || []);
   validateFixedCostPayments_(payload.fixedCostPayments || [], payload.fixedCosts || []);
@@ -554,6 +556,28 @@ function validateDebts_(debts, accounts) {
   });
 }
 
+function validateTransactions_(transactions, accounts) {
+  var accountIds = {};
+  var ids = {};
+  (accounts || []).forEach(function (account) {
+    if (account && typeof account === "object" && String(account.id || "").trim()) accountIds[String(account.id).trim()] = true;
+  });
+  (transactions || []).forEach(function (transaction) {
+    if (!transaction || typeof transaction !== "object" || Array.isArray(transaction)) throw new Error("Lançamento inválido.");
+    var id = String(transaction.id || "").trim();
+    var date = String(transaction.date || "").trim();
+    var type = String(transaction.type || "").trim();
+    var amount = Number(transaction.amount);
+    var accountId = String(transaction.accountId || "").trim();
+    if (!id || ids[id]) throw new Error("Cada lançamento precisa ter um ID único.");
+    if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(date)) throw new Error("Cada lançamento precisa ter uma data válida.");
+    if (["entrada", "saida"].indexOf(type) === -1) throw new Error("Cada lançamento precisa indicar entrada ou saída.");
+    if (!isFinite(amount) || amount <= 0) throw new Error("Cada lançamento precisa ter um valor maior que zero.");
+    if (!accountId || !accountIds[accountId]) throw new Error("Cada lançamento precisa estar vinculado a uma conta existente.");
+    ids[id] = true;
+  });
+}
+
 /**
  * Cartões são um cadastro vinculado a uma conta existente. Cada fatura paga
  * mantém seu próprio registro e precisa ter exatamente um lançamento de saída
@@ -581,6 +605,7 @@ function validateCards_(cards, cardPayments, transactions, accounts) {
     if (["credito", "debito"].indexOf(type) === -1) throw new Error("O tipo do cartão deve ser crédito ou débito.");
     if (!accountId || !accountIds[accountId]) throw new Error("O cartão precisa estar vinculado a uma conta existente.");
     if (card.active !== undefined && typeof card.active !== "boolean") throw new Error("O status ativo do cartão deve ser booleano.");
+    if (card.dueDay !== undefined && (!Number.isInteger(Number(card.dueDay)) || Number(card.dueDay) < 1 || Number(card.dueDay) > 31)) throw new Error("O vencimento do cartão deve estar entre 1 e 31.");
     cardById[id] = { id, type, accountId };
   });
 
@@ -621,6 +646,27 @@ function validateCards_(cards, cardPayments, transactions, accounts) {
     const payment = paymentById[paymentId];
     const transaction = transactionByPayment[paymentId];
     if (!transaction || String(transaction.id || "") !== payment.transactionId || transactionById[payment.transactionId] !== transaction) throw new Error("Cada fatura paga precisa ter seu lançamento de saída correspondente.");
+  });
+}
+
+function validateInvestmentCorrections_(investments) {
+  var correctionIds = {};
+  (investments || []).forEach(function (investment) {
+    if (!investment || typeof investment !== "object") throw new Error("Investimento inválido.");
+    var corrections = investment.corrections === undefined ? [] : investment.corrections;
+    if (!Array.isArray(corrections)) throw new Error("Histórico de correções inválido no investimento.");
+    if (corrections.length > MAX_ITEMS_PER_COLLECTION) throw new Error("Quantidade de correções excedida no investimento.");
+    corrections.forEach(function (correction) {
+      if (!correction || typeof correction !== "object" || Array.isArray(correction)) throw new Error("Correção de investimento inválida.");
+      var id = String(correction.id || "").trim();
+      var delta = Number(correction.delta);
+      var targetValue = Number(correction.targetValue);
+      if (!id || correctionIds[id]) throw new Error("Cada correção de investimento precisa ter um ID único.");
+      if (!isFinite(delta) || delta === 0) throw new Error("A diferença da correção precisa ser um número diferente de zero.");
+      if (!String(correction.date || "")) throw new Error("A correção de investimento precisa ter uma data.");
+      if (correction.targetValue !== undefined && (!isFinite(targetValue) || targetValue < 0)) throw new Error("O valor final da correção precisa ser maior ou igual a zero.");
+      correctionIds[id] = true;
+    });
   });
 }
 
