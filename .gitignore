@@ -10,6 +10,7 @@ secrets/
 private/
 exports/
 backups/
+.playwright-cli/
 .clasp.json
 appsscript.json
 docs/OPERATIONS_PRIVATE.md
